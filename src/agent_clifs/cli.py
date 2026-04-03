@@ -24,7 +24,7 @@ COMMAND_HELP: dict[str, str] = {
     "cat": "Display file contents",
     "head": "Display first lines of a file",
     "tail": "Display last lines of a file",
-    "view": "Display file contents with line numbers and optional range",
+    "sed": "Stream editor: print/filter lines by address or pattern",
     "wc": "Count lines, words, and bytes",
     "grep": "Search file contents using regex patterns",
     "find": "Find files and directories by name or type",
@@ -39,7 +39,7 @@ COMMAND_HELP: dict[str, str] = {
 
 _CATEGORIES: dict[str, list[str]] = {
     "Navigation": ["pwd", "cd", "ls", "tree"],
-    "Reading": ["cat", "head", "tail", "view", "wc"],
+    "Reading": ["cat", "head", "tail", "sed", "wc"],
     "Search": ["grep", "find"],
     "File Operations": ["mkdir", "touch", "write", "append", "rm", "cp", "mv"],
 }
