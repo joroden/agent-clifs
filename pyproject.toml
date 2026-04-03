@@ -7,11 +7,10 @@ name = "agent-clifs"
 version = "1.0.0"
 description = "A CLI-driven virtual filesystem for AI agents"
 readme = "README.md"
-license = {text = "Unlicense"}
+license = "Unlicense"
 requires-python = ">=3.10"
 authors = [{name = "joroden"}]
 classifiers = [
-    "License :: OSI Approved :: The Unlicense (Unlicense)",
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
 ]
@@ -42,6 +41,7 @@ build_command = """
 """
 commit_parser = "conventional"
 tag_format = "v{version}"
+major_on_zero = false
 
 [tool.semantic_release.branches.main]
 match = "main"
