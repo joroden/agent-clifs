@@ -55,6 +55,22 @@ class RedirectInfo:
     stderr_redirect: str | None = None
 
 
+def _strip_pipe_path(output: str, pipe_path: str) -> str:
+    prefix = pipe_path + ":"
+    suffix = " " + pipe_path
+    lines = output.splitlines(keepends=True)
+    result = []
+    for line in lines:
+        body = line.rstrip("\n\r")
+        eol = line[len(body):]
+        if body.startswith(prefix):
+            body = body[len(prefix):].lstrip(" ")
+        elif body.endswith(suffix):
+            body = body[: -len(suffix)]
+        result.append(body + eol)
+    return "".join(result)
+
+
 def _extract_redirection(command: str) -> tuple[str, RedirectInfo]:
     """Parse *command* for unquoted redirection operators.
 
@@ -303,13 +319,17 @@ class AgentCLI:
 
         temp_files: list[str] = []
         try:
-            result = self._execute_single(segments[0].strip())
+            first_seg, _ = _extract_redirection(segments[0].strip())
+            result = self._execute_single(first_seg)
             for seg in segments[1:]:
+                seg_clean, _ = _extract_redirection(seg.strip())
                 tmp_path = f"/tmp/.pipe_{uuid.uuid4().hex}"
-                self.vfs.write_file(tmp_path, result)
+                pipe_content = result if result.endswith("\n") else result + "\n"
+                self.vfs.write_file(tmp_path, pipe_content)
                 temp_files.append(tmp_path)
-                cmd_str = f"{seg.strip()} {tmp_path}"
+                cmd_str = f"{seg_clean.strip()} {tmp_path}"
                 result = self._execute_single(cmd_str)
+                result = _strip_pipe_path(result, tmp_path)
             return result
         finally:
             for path in temp_files:
