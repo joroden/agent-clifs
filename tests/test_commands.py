@@ -581,14 +581,14 @@ class TestFindEnhanced:
         assert any("readme.md" in l for l in lines)
 
     def test_find_not_name(self, populated_vfs):
-        result = cmd_find(populated_vfs, ["/", "-type", "f", "--not-name", "*.md"])
+        result = cmd_find(populated_vfs, ["/", "-type", "f", "-not", "-name", "*.md"])
         lines = result.strip().splitlines()
         for line in lines:
             assert not line.endswith(".md")
         assert any(line.endswith(".py") for line in lines)
 
     def test_find_not_path(self, populated_vfs):
-        result = cmd_find(populated_vfs, ["/", "-type", "f", "--not-path", "*/docs/*"])
+        result = cmd_find(populated_vfs, ["/", "-type", "f", "-not", "-path", "*/docs/*"])
         lines = result.strip().splitlines()
         for line in lines:
             assert "/docs/" not in line

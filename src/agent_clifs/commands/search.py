@@ -94,11 +94,17 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
     parser.add_argument("-F", "--fixed-strings", action="store_true")
     parser.add_argument("-i", "--ignore-case", action="store_true")
     parser.add_argument("-n", "--line-number", action="store_true")
-    parser.add_argument("-r", "--recursive", action="store_true")
+    parser.add_argument("-r", "-R", "--recursive", action="store_true")
     parser.add_argument("-l", "--files-with-matches", action="store_true")
+    parser.add_argument("-L", "--files-without-match", action="store_true")
     parser.add_argument("-c", "--count", action="store_true")
     parser.add_argument("-v", "--invert-match", action="store_true")
     parser.add_argument("-w", "--word-regexp", action="store_true")
+    parser.add_argument("-x", "--line-regexp", action="store_true")
+    parser.add_argument("-o", "--only-matching", action="store_true")
+    parser.add_argument("-q", "--quiet", "--silent", action="store_true")
+    parser.add_argument("-s", "--no-messages", action="store_true")
+    parser.add_argument("-m", "--max-count", type=int, default=None, metavar="N")
     parser.add_argument("-H", "--with-filename", action="store_true")
     parser.add_argument("-h", "--no-filename", action="store_true")
     parser.add_argument("--include", dest="include")
@@ -106,6 +112,11 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
     parser.add_argument("-A", "--after-context", type=int, default=0)
     parser.add_argument("-B", "--before-context", type=int, default=0)
     parser.add_argument("-C", "--context", type=int, default=0)
+    # Regex-engine selection flags: Python re is already ERE/PCRE-like; accepted for
+    # compatibility so combined flags like -Ern or -Prn work without errors.
+    parser.add_argument("-E", "--extended-regexp", action="store_true")
+    parser.add_argument("-G", "--basic-regexp", action="store_true")
+    parser.add_argument("-P", "--perl-regexp", action="store_true")
 
     opts = parser.parse_args(args)
 
@@ -124,6 +135,9 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
     if opts.word_regexp:
         raw_patterns = [r"\b(?:" + p + r")\b" for p in raw_patterns]
 
+    if opts.line_regexp:
+        raw_patterns = [r"^(?:" + p + r")$" for p in raw_patterns]
+
     combined = "|".join(raw_patterns) if len(raw_patterns) > 1 else raw_patterns[0]
 
     if not opts.fixed_strings:
@@ -138,7 +152,12 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
     except re.error as exc:
         raise CommandError(f"grep: invalid regex: {exc}") from exc
 
-    files = _collect_files(vfs, opts.paths, opts.recursive)
+    try:
+        files = _collect_files(vfs, opts.paths, opts.recursive)
+    except CommandError:
+        if opts.no_messages:
+            return ""
+        raise
 
     if opts.include:
         files = [f for f in files if fnmatch.fnmatch(f.rsplit("/", 1)[-1], opts.include)]
@@ -152,6 +171,16 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
     else:
         show_prefix = len(files) > 1
 
+    # -L: files WITHOUT any match (complement of -l)
+    if opts.files_without_match:
+        result: list[str] = []
+        for fpath in files:
+            content = vfs.read_file(fpath)
+            if not _match_lines(regex, content.splitlines(), opts.invert_match):
+                result.append(fpath)
+        return "\n".join(result)
+
+    # -l: files that contain at least one match
     if opts.files_with_matches:
         matched_files: list[str] = []
         for fpath in files:
@@ -160,18 +189,25 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
                 matched_files.append(fpath)
         return "\n".join(matched_files)
 
+    # -c: count matching lines per file
     if opts.count:
         parts: list[str] = []
         for fpath in files:
             content = vfs.read_file(fpath)
             n = len(_match_lines(regex, content.splitlines(), opts.invert_match))
+            if opts.max_count is not None:
+                n = min(n, opts.max_count)
             if show_prefix:
                 parts.append(f"{fpath}:{n}")
             else:
                 parts.append(str(n))
         return "\n".join(parts)
 
-    # Full matching with optional context
+    # -q: suppress all output regardless of match result
+    if opts.quiet:
+        return ""
+
+    # Full matching with optional context / only-matching
     has_context = before_ctx > 0 or after_ctx > 0
     output_lines: list[str] = []
     first_file = True
@@ -185,8 +221,28 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
         if not match_indices:
             continue
 
+        sorted_matches = sorted(match_indices)
+
+        # -m: cap the number of matching lines per file
+        if opts.max_count is not None:
+            sorted_matches = sorted_matches[: opts.max_count]
+            match_indices = set(sorted_matches)
+
+        # -o: emit only the matched text portions, one per match per line
+        if opts.only_matching and not opts.invert_match:
+            for idx in sorted_matches:
+                for m in regex.finditer(lines[idx]):
+                    parts_line: list[str] = []
+                    if show_prefix:
+                        parts_line.append(fpath + ":")
+                    if opts.line_number:
+                        parts_line.append(str(idx + 1) + ":")
+                    parts_line.append(m.group())
+                    output_lines.append("".join(parts_line))
+            continue
+
         context_groups: list[tuple[int, int]] = []
-        for idx in sorted(match_indices):
+        for idx in sorted_matches:
             start = max(0, idx - before_ctx)
             end = min(len(lines) - 1, idx + after_ctx)
             if context_groups and start <= context_groups[-1][1] + 1:
@@ -204,7 +260,7 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
             for idx in range(gstart, gend + 1):
                 is_match = idx in match_indices
                 sep = ":" if is_match else "-"
-                parts_line: list[str] = []
+                parts_line = []
                 if show_prefix:
                     parts_line.append(fpath)
                     parts_line.append(sep)
@@ -218,91 +274,317 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
 
 
 # ------------------------------------------------------------------
+# find – expression-parser helpers
+# ------------------------------------------------------------------
+
+# Tokens that signal the start of a find expression (vs. a starting path).
+_FIND_EXPR_TOKENS: frozenset[str] = frozenset({
+    "-name", "-iname", "-type", "-path", "-maxdepth", "-mindepth",
+    "-size", "-empty", "-newer", "-print", "-delete", "-exec",
+    "-not", "-a", "-and", "-o", "-or", "!", "(", ")"
+})
+
+
+def _make_size_pred(spec: str, vfs: "VirtualFileSystem"):  # type: ignore[return]
+    """Return a predicate function for ``-size SPEC`` (e.g. ``+5k``, ``-10M``)."""
+    m = re.match(r"^([+-]?)(\d+)([cwbkMG]?)$", spec)
+    if not m:
+        raise CommandError(f"find: -size: invalid size spec '{spec}'")
+    cmp_op, num_s, unit = m.groups()
+    num = int(num_s)
+    unit_bytes: dict[str, int] = {
+        "": 512, "b": 512, "c": 1, "w": 2,
+        "k": 1024, "M": 1024 * 1024, "G": 1024 * 1024 * 1024,
+    }
+    factor = unit_bytes[unit]
+
+    def _pred(abs_p: str, t: str, dp: str, bn: str) -> bool:
+        if t != "f":
+            return False
+        try:
+            size = len(vfs.read_file(abs_p).encode())
+        except Exception:
+            return False
+        # Convert bytes to blocks; ceil-divide for block-based units
+        n = -(-size // factor) if factor > 1 else size  # ceil div
+        if cmp_op == "+":
+            return n > num
+        if cmp_op == "-":
+            return n < num
+        return n == num
+
+    return _pred
+
+
+class _FindParser:
+    """Recursive-descent parser for ``find`` predicate expressions.
+
+    Grammar::
+
+        expr    = or
+        or      = and ( ('-o' | '-or') and )*
+        and     = not  ( ('-a' | '-and' | <implicit>) not )*
+        not     = ('!' | '-not') not | primary
+        primary = '(' expr ')' | predicate | action
+    """
+
+    def __init__(self, vfs: "VirtualFileSystem", tokens: list[str]) -> None:
+        self.vfs = vfs
+        self.tokens: list[str] = list(tokens)
+        self.pos = 0
+        self.maxdepth: int | None = None
+        self.mindepth: int | None = None
+        self.has_delete = False
+        self._hoist_depth_options()
+
+    # ------------------------------------------------------------------
+    # Pre-processing
+    # ------------------------------------------------------------------
+
+    def _hoist_depth_options(self) -> None:
+        """-maxdepth / -mindepth are global options; pull them out early."""
+        remaining: list[str] = []
+        i = 0
+        while i < len(self.tokens):
+            tok = self.tokens[i]
+            if tok in ("-maxdepth", "-mindepth") and i + 1 < len(self.tokens):
+                try:
+                    val = int(self.tokens[i + 1])
+                except ValueError:
+                    raise CommandError(
+                        f"find: {tok}: invalid number '{self.tokens[i + 1]}'"
+                    )
+                if tok == "-maxdepth":
+                    self.maxdepth = val
+                else:
+                    self.mindepth = val
+                i += 2
+            else:
+                remaining.append(self.tokens[i])
+                i += 1
+        self.tokens = remaining
+
+    # ------------------------------------------------------------------
+    # Token helpers
+    # ------------------------------------------------------------------
+
+    @property
+    def _cur(self) -> str | None:
+        return self.tokens[self.pos] if self.pos < len(self.tokens) else None
+
+    def _advance(self) -> str:
+        tok = self.tokens[self.pos]
+        self.pos += 1
+        return tok
+
+    def _need(self, flag: str) -> str:
+        if self.pos >= len(self.tokens):
+            raise CommandError(f"find: missing argument to '{flag}'")
+        return self._advance()
+
+    # ------------------------------------------------------------------
+    # Grammar rules
+    # ------------------------------------------------------------------
+
+    def parse(self):
+        if self.pos >= len(self.tokens):
+            return lambda *_: True  # empty expression → match everything
+        pred = self._or()
+        if self.pos < len(self.tokens):
+            raise CommandError(f"find: unexpected token '{self.tokens[self.pos]}'")
+        return pred
+
+    def _or(self):
+        left = self._and()
+        while self._cur in ("-o", "-or"):
+            self._advance()
+            right = self._and()
+            left = self._mk_or(left, right)
+        return left
+
+    def _and(self):
+        left = self._not()
+        while self._cur not in (None, "-o", "-or", ")"):
+            if self._cur in ("-a", "-and"):
+                self._advance()
+            right = self._not()
+            left = self._mk_and(left, right)
+        return left
+
+    def _not(self):
+        if self._cur in ("!", "-not"):
+            self._advance()
+            return self._mk_not(self._not())
+        return self._primary()
+
+    def _primary(self):  # noqa: C901
+        tok = self._cur
+        if tok is None:
+            return lambda *_: True
+
+        if tok == "(":
+            self._advance()
+            inner = self._or()
+            if self._cur == ")":
+                self._advance()
+            else:
+                raise CommandError("find: unmatched '('")
+            return inner
+
+        self._advance()  # consume the predicate token
+
+        if tok == "-name":
+            pat = self._need("-name")
+            return lambda a, t, d, bn, p=pat: fnmatch.fnmatch(bn, p)
+
+        if tok == "-iname":
+            pat = self._need("-iname")
+            return lambda a, t, d, bn, p=pat: fnmatch.fnmatch(bn.lower(), p.lower())
+
+        if tok == "-type":
+            tv = self._need("-type")
+            if tv not in ("f", "d"):
+                raise CommandError(f"find: -type: unknown type '{tv}'; use 'f' or 'd'")
+            return lambda a, t, d, bn, v=tv: t == v
+
+        if tok == "-path":
+            pat = self._need("-path")
+            return lambda a, t, d, bn, p=pat: fnmatch.fnmatch(d, p)
+
+        if tok == "-size":
+            return _make_size_pred(self._need("-size"), self.vfs)
+
+        if tok == "-empty":
+            vfs = self.vfs
+            return lambda a, t, d, bn: (
+                (t == "f" and _safe_read(vfs, a) == "")
+                or (t == "d" and len(vfs.list_dir(a)) == 0)
+            )
+
+        if tok == "-newer":
+            self._need("-newer")  # consume the ref-path argument
+            raise CommandError("find: -newer: not supported (VFS has no timestamps)")
+
+        if tok == "-exec":
+            raise CommandError(
+                "find: -exec is not supported in VFS context; "
+                "pipe find output to other commands instead"
+            )
+
+        if tok == "-print":
+            return lambda *_: True  # default action; always true
+
+        if tok == "-delete":
+            self.has_delete = True
+            return lambda *_: True  # deletion is handled after the walk
+
+        raise CommandError(f"find: unknown predicate '{tok}'")
+
+    # ------------------------------------------------------------------
+    # Combinator helpers (capture by default arg to avoid late-binding)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _mk_or(l, r):
+        return lambda a, t, d, bn, lp=l, rp=r: lp(a, t, d, bn) or rp(a, t, d, bn)
+
+    @staticmethod
+    def _mk_and(l, r):
+        return lambda a, t, d, bn, lp=l, rp=r: lp(a, t, d, bn) and rp(a, t, d, bn)
+
+    @staticmethod
+    def _mk_not(inner):
+        return lambda a, t, d, bn, i=inner: not i(a, t, d, bn)
+
+
+def _safe_read(vfs: "VirtualFileSystem", path: str) -> str:
+    try:
+        return vfs.read_file(path)
+    except Exception:
+        return ""
+
+
+# ------------------------------------------------------------------
 # find
 # ------------------------------------------------------------------
 
 def cmd_find(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Find files and directories matching given criteria."""
-    parser = _make_parser("find", "Search for files in a directory hierarchy")
-    parser.add_argument("start", nargs="?", default=".")
-    parser.add_argument("-name", dest="name")
-    parser.add_argument("-iname", dest="iname")
-    parser.add_argument("-type", dest="type", choices=["f", "d"])
-    parser.add_argument("-path", dest="path_pattern")
-    parser.add_argument("-maxdepth", dest="maxdepth", type=int)
-    parser.add_argument("-mindepth", dest="mindepth", type=int)
-    parser.add_argument("--not-name", dest="not_name")
-    parser.add_argument("--not-path", dest="not_path")
+    # Split leading positional arguments (starting paths) from the expression.
+    paths: list[str] = []
+    i = 0
+    while i < len(args) and args[i] not in _FIND_EXPR_TOKENS:
+        paths.append(args[i])
+        i += 1
+    if not paths:
+        paths = ["."]
 
-    opts = parser.parse_args(args)
+    fp = _FindParser(vfs, args[i:])
+    predicate = fp.parse()
 
-    start = opts.start
-    abs_start = vfs.resolve_path(start)
-
-    if not vfs.is_dir(abs_start):
-        if vfs.exists(abs_start):
-            raise CommandError(f"find: '{start}': Not a directory")
-        raise CommandError(f"find: '{start}': No such file or directory")
-
-    use_relative = not start.startswith("/")
     results: list[str] = []
+    to_delete: list[str] = []
 
-    def _display_path(abs_path: str) -> str:
-        if abs_path == abs_start:
-            return start if use_relative else abs_path
-        if abs_start == "/":
-            rel = abs_path
-        else:
-            rel = abs_path[len(abs_start):]
-        if use_relative:
-            return start.rstrip("/") + rel
-        return abs_path
+    for start in paths:
+        abs_start = vfs.resolve_path(start)
+        if not vfs.is_dir(abs_start):
+            if vfs.exists(abs_start):
+                raise CommandError(f"find: '{start}': Not a directory")
+            raise CommandError(f"find: '{start}': No such file or directory")
 
-    def _depth(abs_path: str) -> int:
-        if abs_path == abs_start:
-            return 0
-        if abs_start == "/":
-            return abs_path.count("/")
-        return abs_path[len(abs_start):].count("/")
+        use_rel = not start.startswith("/")
 
-    def _matches(display: str, basename: str, entry_type: str, depth: int) -> bool:
-        if opts.maxdepth is not None and depth > opts.maxdepth:
-            return False
-        if opts.mindepth is not None and depth < opts.mindepth:
-            return False
-        if opts.type is not None and opts.type != entry_type:
-            return False
-        if opts.name is not None and not fnmatch.fnmatch(basename, opts.name):
-            return False
-        if opts.iname is not None and not fnmatch.fnmatch(basename.lower(), opts.iname.lower()):
-            return False
-        if opts.path_pattern is not None and not fnmatch.fnmatch(display, opts.path_pattern):
-            return False
-        if opts.not_name is not None and fnmatch.fnmatch(basename, opts.not_name):
-            return False
-        if opts.not_path is not None and fnmatch.fnmatch(display, opts.not_path):
-            return False
-        return True
+        def _disp(p: str, _a=abs_start, _s=start, _r=use_rel) -> str:
+            if p == _a:
+                return _s if _r else p
+            suffix = p[len(_a):] if _a != "/" else p
+            return (_s.rstrip("/") + suffix) if _r else p
 
-    for dirpath, dirnames, filenames in vfs.walk(abs_start):
-        dir_depth = _depth(dirpath)
+        def _depth(p: str, _a=abs_start) -> int:
+            if p == _a:
+                return 0
+            seg = p[len(_a):] if _a != "/" else p
+            return seg.count("/")
 
-        if opts.maxdepth is not None and dir_depth > opts.maxdepth:
-            continue
+        for dirpath, _dirnames, filenames in vfs.walk(abs_start):
+            ddepth = _depth(dirpath)
 
-        dp = _display_path(dirpath)
-        basename = dirpath.rsplit("/", 1)[-1] if dirpath != "/" else "/"
-        if _matches(dp, basename, "d", dir_depth):
-            results.append(dp)
+            if fp.maxdepth is not None and ddepth > fp.maxdepth:
+                continue
 
-        if opts.maxdepth is not None and dir_depth + 1 > opts.maxdepth:
-            continue
+            # Evaluate this directory entry
+            if fp.mindepth is None or ddepth >= fp.mindepth:
+                dp = _disp(dirpath)
+                bn = dirpath.rsplit("/", 1)[-1] if dirpath != "/" else "/"
+                if predicate(dirpath, "d", dp, bn):
+                    results.append(dp)
+                    if fp.has_delete:
+                        to_delete.append(dirpath)
 
-        for fname in filenames:
-            fpath = dirpath.rstrip("/") + "/" + fname
-            fdp = _display_path(fpath)
-            fdepth = dir_depth + 1
-            if _matches(fdp, fname, "f", fdepth):
-                results.append(fdp)
+            # Evaluate files inside this directory
+            if fp.maxdepth is None or ddepth + 1 <= fp.maxdepth:
+                for fname in filenames:
+                    fpath = dirpath.rstrip("/") + "/" + fname
+                    fdepth = ddepth + 1
+                    if fp.mindepth is None or fdepth >= fp.mindepth:
+                        fdp = _disp(fpath)
+                        if predicate(fpath, "f", fdp, fname):
+                            results.append(fdp)
+                            if fp.has_delete:
+                                to_delete.append(fpath)
+
+    if fp.has_delete:
+        # Delete files first, then directories deepest-first to avoid conflicts
+        for p in [p for p in to_delete if vfs.is_file(p)]:
+            try:
+                vfs.remove_file(p)
+            except Exception:
+                pass
+        for p in sorted((p for p in to_delete if vfs.is_dir(p)), reverse=True):
+            try:
+                vfs.rmdir(p, recursive=True)
+            except Exception:
+                pass
+        return ""
 
     return "\n".join(sorted(results))

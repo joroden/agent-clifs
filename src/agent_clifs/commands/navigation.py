@@ -97,6 +97,8 @@ def cmd_ls(vfs: VirtualFileSystem, args: list[str]) -> str:
     parser.add_argument("-S", "--sort-size", action="store_true")
     parser.add_argument("-1", "--oneline", action="store_true")
     parser.add_argument("-d", "--directory", action="store_true")
+    parser.add_argument("-r", "--reverse", action="store_true")
+    parser.add_argument("-F", "--classify", action="store_true")
     parsed = parser.parse_args(args)
 
     multiple = len(parsed.paths) > 1
@@ -104,12 +106,30 @@ def cmd_ls(vfs: VirtualFileSystem, args: list[str]) -> str:
 
     for path in parsed.paths:
         try:
+            resolved = vfs.resolve_path(path)
             if parsed.directory:
                 sections.append(_ls_directory_entry(vfs, path, parsed.long, parsed.human_readable))
+            elif vfs.is_file(resolved):
+                name = resolved.rsplit("/", 1)[-1]
+                sections.append(_format_entry(vfs, resolved, name, parsed.long, parsed.human_readable))
             elif parsed.recursive:
-                sections.append(_ls_recursive(vfs, path, parsed.long, show_header=multiple, human=parsed.human_readable, sort_size=parsed.sort_size))
+                sections.append(_ls_recursive(
+                    vfs, path, parsed.long,
+                    show_header=multiple,
+                    human=parsed.human_readable,
+                    sort_size=parsed.sort_size,
+                    show_all=parsed.all,
+                    reverse=parsed.reverse,
+                ))
             else:
-                sections.append(_ls_single(vfs, path, parsed.long, show_header=multiple, human=parsed.human_readable, sort_size=parsed.sort_size))
+                sections.append(_ls_single(
+                    vfs, path, parsed.long,
+                    show_header=multiple,
+                    human=parsed.human_readable,
+                    sort_size=parsed.sort_size,
+                    show_all=parsed.all,
+                    reverse=parsed.reverse,
+                ))
         except VFSError as exc:
             raise CommandError(f"ls: {exc}") from exc
 
@@ -149,11 +169,17 @@ def _ls_single(
     show_header: bool,
     human: bool = False,
     sort_size: bool = False,
+    show_all: bool = True,
+    reverse: bool = False,
 ) -> str:
     resolved = vfs.resolve_path(path)
     entries = vfs.list_dir(resolved)
+    if not show_all:
+        entries = [e for e in entries if not e.startswith(".")]
     if sort_size:
         entries = _sort_entries_by_size(vfs, resolved, entries)
+    if reverse:
+        entries = list(reversed(entries))
     lines: list[str] = []
 
     if show_header:
@@ -174,6 +200,8 @@ def _ls_recursive(
     show_header: bool,
     human: bool = False,
     sort_size: bool = False,
+    show_all: bool = True,
+    reverse: bool = False,
 ) -> str:
     resolved = vfs.resolve_path(path)
     sections: list[str] = []
@@ -181,8 +209,12 @@ def _ls_recursive(
     for dirpath, dirnames, filenames in vfs.walk(resolved):
         lines: list[str] = [f"{dirpath}:"]
         names = sorted(dirnames + filenames)
+        if not show_all:
+            names = [n for n in names if not n.startswith(".")]
         if sort_size:
             names = _sort_entries_by_size(vfs, dirpath, names)
+        if reverse:
+            names = list(reversed(names))
         for name in names:
             child_path = dirpath.rstrip("/") + "/" + name
             lines.append(_format_entry(vfs, child_path, name, long, human))

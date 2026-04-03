@@ -119,7 +119,7 @@ def cmd_append(vfs: VirtualFileSystem, args: list[str]) -> str:
 def cmd_rm(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Remove files and directories."""
     parser = _make_parser("rm", "Remove files and directories")
-    parser.add_argument("-r", "--recursive", action="store_true")
+    parser.add_argument("-r", "-R", "--recursive", action="store_true")
     parser.add_argument("-f", "--force", action="store_true")
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("paths", nargs="+", metavar="PATH")
@@ -166,7 +166,7 @@ def cmd_rm(vfs: VirtualFileSystem, args: list[str]) -> str:
 def cmd_cp(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Copy files and directories."""
     parser = _make_parser("cp", "Copy files and directories")
-    parser.add_argument("-r", "--recursive", action="store_true")
+    parser.add_argument("-r", "-R", "--recursive", action="store_true")
     parser.add_argument("-a", "--archive", action="store_true")
     parser.add_argument("-n", "--no-clobber", action="store_true")
     parser.add_argument("-v", "--verbose", action="store_true")

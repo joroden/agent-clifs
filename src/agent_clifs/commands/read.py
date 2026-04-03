@@ -44,6 +44,8 @@ def cmd_cat(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Concatenate and print files."""
     parser = _make_parser("cat", "Concatenate and print files")
     parser.add_argument("-n", "--number", action="store_true", help="number all output lines")
+    parser.add_argument("-b", "--number-nonblank", action="store_true",
+                        help="number non-empty output lines (overrides -n)")
     parser.add_argument("-s", "--squeeze-blank", action="store_true", help="suppress repeated empty lines")
     parser.add_argument("files", nargs="+", metavar="FILE")
     parsed = parser.parse_args(args)
@@ -62,6 +64,19 @@ def cmd_cat(vfs: VirtualFileSystem, args: list[str]) -> str:
             squeezed.append(line)
             prev_blank = is_blank
         combined = "".join(squeezed)
+
+    # -b overrides -n: number only non-blank lines
+    if parsed.number_nonblank:
+        lines = combined.splitlines(keepends=True)
+        counter = 0
+        result: list[str] = []
+        for line in lines:
+            if line.rstrip("\r\n"):  # non-blank
+                counter += 1
+                result.append(f"{counter:6}\t{line}")
+            else:
+                result.append(line)
+        return "".join(result)
 
     if not parsed.number:
         return combined
@@ -223,37 +238,44 @@ def cmd_wc(vfs: VirtualFileSystem, args: list[str]) -> str:
     parser.add_argument("-l", "--lines", action="store_true", help="print the newline counts")
     parser.add_argument("-w", "--words", action="store_true", help="print the word counts")
     parser.add_argument("-c", "--bytes", action="store_true", help="print the byte counts")
+    parser.add_argument("-m", "--chars", action="store_true", help="print the character counts")
     parser.add_argument("files", nargs="+", metavar="FILE")
     parsed = parser.parse_args(args)
 
-    show_all = not (parsed.lines or parsed.words or parsed.bytes)
+    show_all = not (parsed.lines or parsed.words or parsed.bytes or parsed.chars)
 
-    totals = {"lines": 0, "words": 0, "bytes": 0}
+    totals = {"lines": 0, "words": 0, "bytes": 0, "chars": 0}
     output_lines: list[str] = []
 
     for filepath in parsed.files:
         content = _read(vfs, filepath, "wc")
         line_count = content.count("\n")
         word_count = len(content.split())
-        byte_count = len(content)
+        byte_count = len(content.encode())
+        char_count = len(content)
 
         totals["lines"] += line_count
         totals["words"] += word_count
         totals["bytes"] += byte_count
+        totals["chars"] += char_count
 
-        output_lines.append(_format_wc(line_count, word_count, byte_count, filepath,
-                                       show_all, parsed.lines, parsed.words, parsed.bytes))
+        output_lines.append(_format_wc(
+            line_count, word_count, byte_count, char_count, filepath,
+            show_all, parsed.lines, parsed.words, parsed.bytes, parsed.chars,
+        ))
 
     if len(parsed.files) > 1:
-        output_lines.append(_format_wc(totals["lines"], totals["words"], totals["bytes"], "total",
-                                       show_all, parsed.lines, parsed.words, parsed.bytes))
+        output_lines.append(_format_wc(
+            totals["lines"], totals["words"], totals["bytes"], totals["chars"], "total",
+            show_all, parsed.lines, parsed.words, parsed.bytes, parsed.chars,
+        ))
 
     return "\n".join(output_lines) + "\n"
 
 
 def _format_wc(
-    lines: int, words: int, bytes_: int, name: str,
-    show_all: bool, show_l: bool, show_w: bool, show_c: bool,
+    lines: int, words: int, bytes_: int, chars: int, name: str,
+    show_all: bool, show_l: bool, show_w: bool, show_c: bool, show_m: bool,
 ) -> str:
     parts: list[str] = []
     if show_all or show_l:
@@ -262,4 +284,6 @@ def _format_wc(
         parts.append(f"{words:>7}")
     if show_all or show_c:
         parts.append(f"{bytes_:>7}")
+    if show_m and not show_all:
+        parts.append(f"{chars:>7}")
     return " ".join(parts) + f" {name}"
