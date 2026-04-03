@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.2 (2026-04-03)
+
+### Bug Fixes
+
+- Replace view with sed
+  ([`20e349d`](https://github.com/joroden/agent-clifs/commit/20e349d0432f61df90c83c0f4ce28e244b6d5af0))
+
+
 ## v1.1.1 (2026-04-03)
 
 ### Bug Fixes
