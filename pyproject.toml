@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-clifs"
-version = "0.0.0"
+version = "1.0.0"
 description = "A CLI-driven virtual filesystem for AI agents"
 readme = "README.md"
 license = {text = "Unlicense"}
