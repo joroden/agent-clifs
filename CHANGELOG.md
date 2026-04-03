@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.1.1 (2026-04-03)
+
+### Bug Fixes
+
+- Add no-op grep flags
+  ([`7bd613b`](https://github.com/joroden/agent-clifs/commit/7bd613b8d3dcf52d4855019d13b9b627440c725c))
+
+### Testing
+
+- Refactor command tests
+  ([`b5ddb23`](https://github.com/joroden/agent-clifs/commit/b5ddb23625dc97d1d742df34a77c9b9d455b0a27))
+
+
 ## v1.1.0 (2026-04-03)
 
 ### Bug Fixes
