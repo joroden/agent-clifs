@@ -1,8 +1,9 @@
-"""File reading commands: cat, head, tail, view, wc."""
+"""File reading commands: cat, head, tail, wc, sed."""
 
 from __future__ import annotations
 
 import argparse
+import re
 from typing import TYPE_CHECKING
 
 from agent_clifs.exceptions import CommandError, VFSError
@@ -169,65 +170,6 @@ def cmd_tail(vfs: VirtualFileSystem, args: list[str]) -> str:
 
 
 # ------------------------------------------------------------------
-# view
-# ------------------------------------------------------------------
-
-
-def cmd_view(vfs: VirtualFileSystem, args: list[str]) -> str:
-    """Display file contents with line numbers and optional line range."""
-    if not args:
-        raise CommandError("view: missing file operand")
-
-    filepath = args[0]
-    content = _read(vfs, filepath, "view")
-    lines = content.splitlines()
-    total = len(lines)
-
-    start_line = 1
-    end_line = total
-
-    if len(args) >= 2:
-        try:
-            start_line = int(args[1])
-        except ValueError:
-            raise CommandError(f"view: invalid start line: '{args[1]}'")
-
-    if len(args) >= 3:
-        try:
-            end_line = int(args[2])
-        except ValueError:
-            raise CommandError(f"view: invalid end line: '{args[2]}'")
-        if end_line == -1:
-            end_line = total
-    elif len(args) == 2:
-        end_line = total
-
-    if start_line < 1:
-        raise CommandError(f"view: invalid start line: {start_line}")
-    if start_line > total:
-        raise CommandError(f"view: line {start_line} is beyond end of file ({total} lines)")
-    if end_line < start_line:
-        raise CommandError(f"view: end line {end_line} is before start line {start_line}")
-    if end_line > total:
-        end_line = total
-
-    selected = lines[start_line - 1 : end_line]
-    width = len(str(end_line))
-
-    showing_range = not (start_line == 1 and end_line == total)
-    if showing_range:
-        header = f"File: {filepath} (lines {start_line}-{end_line} of {total})"
-    else:
-        header = f"File: {filepath} ({total} lines)"
-
-    result_lines = [header]
-    for i, line in enumerate(selected, start=start_line):
-        result_lines.append(f"{i:>{width}} | {line}")
-
-    return "\n".join(result_lines)
-
-
-# ------------------------------------------------------------------
 # wc
 # ------------------------------------------------------------------
 
@@ -287,3 +229,156 @@ def _format_wc(
     if show_m and not show_all:
         parts.append(f"{chars:>7}")
     return " ".join(parts) + f" {name}"
+
+
+# ------------------------------------------------------------------
+# sed
+# ------------------------------------------------------------------
+
+_Addr = tuple
+_Cmd = tuple
+
+
+def _sed_parse_addr(s: str, i: int) -> tuple[_Addr | None, int]:
+    if i >= len(s):
+        return None, i
+    if s[i] == '$':
+        return ('last',), i + 1
+    if s[i].isdigit():
+        j = i
+        while j < len(s) and s[j].isdigit():
+            j += 1
+        return ('line', int(s[i:j])), j
+    if s[i] == '/':
+        j = i + 1
+        while j < len(s) and not (s[j] == '/' and s[j - 1] != '\\'):
+            j += 1
+        pat = s[i + 1:j].replace('\\/', '/')
+        return ('regex', pat), j + 1
+    return None, i
+
+
+def _sed_parse(script: str) -> list[_Cmd]:
+    commands: list[_Cmd] = []
+    i = 0
+    s = script.strip()
+    while i < len(s):
+        while i < len(s) and s[i] in ' \t;\n':
+            i += 1
+        if i >= len(s):
+            break
+        addr1, i = _sed_parse_addr(s, i)
+        addr2 = None
+        if addr1 is not None and i < len(s) and s[i] == ',':
+            addr2, i = _sed_parse_addr(s, i + 1)
+        if i >= len(s):
+            raise CommandError(f"sed: missing command after address")
+        cmd = s[i]
+        i += 1
+        if cmd not in ('p', 'd', 'q', '='):
+            raise CommandError(f"sed: unsupported command: {cmd!r}")
+        commands.append((addr1, addr2, cmd))
+    return commands
+
+
+def _sed_addr_matches(
+    addr: _Addr,
+    lineno: int,
+    total: int,
+    line: str,
+) -> bool:
+    if addr[0] == 'line':
+        return lineno == addr[1]
+    if addr[0] == 'last':
+        return lineno == total
+    return bool(re.search(addr[1], line))
+
+
+def _sed_range_matches(
+    addr1: _Addr | None,
+    addr2: _Addr | None,
+    lineno: int,
+    total: int,
+    line: str,
+    state: list[bool],
+    idx: int,
+) -> bool:
+    if addr1 is None:
+        return True
+    if addr2 is None:
+        return _sed_addr_matches(addr1, lineno, total, line)
+
+    # Pure line-number range: stateless
+    if addr1[0] == 'line' and addr2[0] == 'line':
+        return addr1[1] <= lineno <= addr2[1]
+    if addr1[0] == 'line' and addr2[0] == 'last':
+        return lineno >= addr1[1]
+
+    # Stateful range (involves regex or mixed)
+    if not state[idx]:
+        if _sed_addr_matches(addr1, lineno, total, line):
+            state[idx] = True
+            if addr2[0] == 'line' and lineno >= addr2[1]:
+                state[idx] = False
+            return True
+        return False
+    else:
+        if _sed_addr_matches(addr2, lineno, total, line):
+            state[idx] = False
+        return True
+
+
+def cmd_sed(vfs: VirtualFileSystem, args: list[str]) -> str:
+    """Basic stream editor for viewing file content."""
+    parser = _make_parser("sed", "Stream editor")
+    parser.add_argument("-n", "--quiet", "--silent", action="store_true", dest="quiet")
+    parser.add_argument("-e", "--expression", action="append", dest="scripts", metavar="SCRIPT")
+    parser.add_argument("positional", nargs="*")
+
+    opts = parser.parse_args(args)
+    scripts = list(opts.scripts or [])
+    remaining = list(opts.positional)
+
+    if not scripts:
+        if not remaining:
+            raise CommandError("sed: no script specified")
+        scripts.append(remaining.pop(0))
+
+    if not remaining:
+        raise CommandError("sed: no input file specified")
+
+    parsed: list[_Cmd] = []
+    for script in scripts:
+        parsed.extend(_sed_parse(script))
+
+    output: list[str] = []
+    for filepath in remaining:
+        content = _read(vfs, vfs.resolve_path(filepath), "sed")
+        lines = content.splitlines()
+        total = len(lines)
+        range_state = [False] * len(parsed)
+
+        for lineno, line in enumerate(lines, start=1):
+            auto_print = not opts.quiet
+            skip_rest = False
+
+            for idx, (addr1, addr2, cmd) in enumerate(parsed):
+                if skip_rest:
+                    break
+                if _sed_range_matches(addr1, addr2, lineno, total, line, range_state, idx):
+                    if cmd == 'p':
+                        output.append(line)
+                    elif cmd == 'd':
+                        auto_print = False
+                        skip_rest = True
+                    elif cmd == 'q':
+                        if auto_print:
+                            output.append(line)
+                        return "\n".join(output)
+                    elif cmd == '=':
+                        output.append(str(lineno))
+
+            if auto_print and not skip_rest:
+                output.append(line)
+
+    return "\n".join(output)
