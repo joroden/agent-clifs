@@ -66,7 +66,33 @@ def _match_lines(regex: re.Pattern[str], lines: list[str], invert: bool) -> set[
 # grep
 # ------------------------------------------------------------------
 
-def _collect_files(vfs: VirtualFileSystem, paths: list[str], recursive: bool) -> list[str]:
+_GREP_NOOP_FLAGS: list[tuple[str, ...]] = [
+    ("-a", "--text"),
+    ("-b", "--byte-offset"),
+    ("-D", "--devices"),
+    ("-E", "--extended-regexp"),
+    ("-G", "--basic-regexp"),
+    ("-I",),
+    ("-P", "--perl-regexp"),
+    ("-T", "--initial-tab"),
+    ("-U", "--binary"),
+    ("-Z", "--null"),
+    ("-z", "--null-data"),
+    ("--color", "--colour"),
+    ("--line-buffered",),
+]
+
+
+def _collect_files(
+    vfs: VirtualFileSystem,
+    paths: list[str],
+    recursive: bool,
+    *,
+    max_depth: int | None = None,
+    exclude_dirs: list[str] | None = None,
+    include_dirs: list[str] | None = None,
+    skip_dirs: bool = False,
+) -> list[str]:
     """Resolve *paths* into a flat sorted list of absolute file paths to search."""
     files: list[str] = []
     for path in paths:
@@ -74,9 +100,19 @@ def _collect_files(vfs: VirtualFileSystem, paths: list[str], recursive: bool) ->
         if vfs.is_file(abs_path):
             files.append(abs_path)
         elif vfs.is_dir(abs_path):
+            if skip_dirs:
+                continue
             if not recursive:
                 raise CommandError(f"grep: {path}: Is a directory")
-            for dirpath, _dirs, filenames in vfs.walk(abs_path):
+            base_depth = abs_path.count("/")
+            for dirpath, dirs, filenames in vfs.walk(abs_path):
+                current_depth = dirpath.count("/") - base_depth
+                if exclude_dirs:
+                    dirs[:] = [d for d in dirs if not any(fnmatch.fnmatch(d, p) for p in exclude_dirs)]
+                if include_dirs:
+                    dirs[:] = [d for d in dirs if any(fnmatch.fnmatch(d, p) for p in include_dirs)]
+                if max_depth is not None and current_depth >= max_depth:
+                    dirs[:] = []
                 for fname in filenames:
                     fpath = dirpath.rstrip("/") + "/" + fname
                     files.append(fpath)
@@ -89,12 +125,14 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Search file contents for lines matching a regular expression."""
     parser = _make_parser("grep", "Search for patterns in files")
     parser.add_argument("pattern", nargs="?", default=None)
-    parser.add_argument("paths", nargs="*", default=["."])
+    parser.add_argument("paths", nargs="*", default=None)
     parser.add_argument("-e", "--regexp", action="append", dest="patterns")
     parser.add_argument("-F", "--fixed-strings", action="store_true")
-    parser.add_argument("-i", "--ignore-case", action="store_true")
+    parser.add_argument("-i", "-y", "--ignore-case", action="store_true")
     parser.add_argument("-n", "--line-number", action="store_true")
     parser.add_argument("-r", "-R", "--recursive", action="store_true")
+    parser.add_argument("-d", "--directories", choices=["read", "recurse", "skip"], default="read")
+    parser.add_argument("-f", "--file", action="append", dest="pattern_files", metavar="FILE")
     parser.add_argument("-l", "--files-with-matches", action="store_true")
     parser.add_argument("-L", "--files-without-match", action="store_true")
     parser.add_argument("-c", "--count", action="store_true")
@@ -109,22 +147,45 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
     parser.add_argument("-h", "--no-filename", action="store_true")
     parser.add_argument("--include", dest="include")
     parser.add_argument("--exclude", dest="exclude")
+    parser.add_argument("--include-dir", action="append", dest="include_dirs", metavar="GLOB")
+    parser.add_argument("--exclude-dir", action="append", dest="exclude_dirs", metavar="GLOB")
+    parser.add_argument("--max-depth", type=int, default=None, dest="max_depth", metavar="N")
     parser.add_argument("-A", "--after-context", type=int, default=0)
     parser.add_argument("-B", "--before-context", type=int, default=0)
     parser.add_argument("-C", "--context", type=int, default=0)
-    # Regex-engine selection flags: Python re is already ERE/PCRE-like; accepted for
-    # compatibility so combined flags like -Ern or -Prn work without errors.
-    parser.add_argument("-E", "--extended-regexp", action="store_true")
-    parser.add_argument("-G", "--basic-regexp", action="store_true")
-    parser.add_argument("-P", "--perl-regexp", action="store_true")
+    for _noop in _GREP_NOOP_FLAGS:
+        has_short = any(len(f) == 2 and f[0] == "-" and f[1] != "-" for f in _noop)
+        if has_short:
+            parser.add_argument(*_noop, action="store_true")
+        else:
+            parser.add_argument(*_noop, nargs="?", const=True, default=None)
 
     opts = parser.parse_args(args)
 
-    # Build the list of raw patterns from -e flags and/or positional arg
+    if opts.directories == "recurse":
+        opts.recursive = True
+    skip_dirs = opts.directories == "skip"
+
+    # When patterns come from -e/-f, argparse may assign the first bare path
+    # argument to opts.pattern instead of opts.paths. Move it over.
+    if (opts.patterns or opts.pattern_files) and opts.pattern is not None:
+        opts.paths = [opts.pattern] + (opts.paths or [])
+        opts.pattern = None
+    if not opts.paths:
+        opts.paths = ["."]
+
+    # Build the list of raw patterns from -e flags, -f files, and/or positional arg
     raw_patterns: list[str] = []
     if opts.patterns:
         raw_patterns.extend(opts.patterns)
-    if opts.pattern is not None and not opts.patterns:
+    if opts.pattern_files:
+        for fpath in opts.pattern_files:
+            abs_fpath = vfs.resolve_path(fpath)
+            try:
+                raw_patterns.extend(line for line in vfs.read_file(abs_fpath).splitlines() if line)
+            except Exception:
+                raise CommandError(f"grep: {fpath}: No such file or directory")
+    if opts.pattern is not None and not opts.patterns and not opts.pattern_files:
         raw_patterns.append(opts.pattern)
     if not raw_patterns:
         raise CommandError("grep: no pattern specified")
@@ -153,7 +214,13 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
         raise CommandError(f"grep: invalid regex: {exc}") from exc
 
     try:
-        files = _collect_files(vfs, opts.paths, opts.recursive)
+        files = _collect_files(
+            vfs, opts.paths, opts.recursive,
+            max_depth=opts.max_depth,
+            exclude_dirs=opts.exclude_dirs,
+            include_dirs=opts.include_dirs,
+            skip_dirs=skip_dirs,
+        )
     except CommandError:
         if opts.no_messages:
             return ""
