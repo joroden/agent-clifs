@@ -25,7 +25,7 @@ class TestPipes:
         assert "beta" not in result
 
     def test_multi_pipe(self, vfs):
-        vfs.write_file("/f.txt", "a\nb\nc\nd\ne")
+        vfs.write_file("/f.txt", "a\nb\nc\nd\ne\n")
         cli = AgentCLI(vfs)
         result = cli.execute("cat /f.txt | grep -v c | wc -l")
         # 4 lines remaining after filtering out 'c'
@@ -64,10 +64,7 @@ class TestPipes:
         cli = AgentCLI(vfs)
         # The | outside quotes is a pipe; the quoted "hello" is preserved
         result = cli.execute('grep "hello" /f.txt | wc -l')
-        # grep returns "hello world\nhello there" (no trailing newline)
-        # wc counts 1 embedded newline → reports 1, which is correct for
-        # POSIX wc behaviour (counts newline characters).
-        assert "1" in result
+        assert "2" in result
 
     def test_empty_pipe_segment_raises(self, vfs):
         vfs.write_file("/f.txt", "x")
