@@ -103,6 +103,111 @@ class TestFullWorkflow:
         assert "line 19" in tail_result
 
 
+class TestReadonlyMode:
+    def test_readonly_blocks_write_commands(self):
+        cli = AgentCLI(readonly=True)
+        write_cmds = ["mkdir /d", "touch /f", "write /f hello", "append /f x", "rm /f", "cp /a /b", "mv /a /b"]
+        for cmd in write_cmds:
+            name = cmd.split()[0]
+            with pytest.raises(CommandError, match=f"command disabled: {name} \\(readonly mode\\)"):
+                cli.execute(cmd)
+
+    def test_readonly_allows_read_commands(self):
+        cli = AgentCLI(readonly=True)
+        assert cli.execute("pwd") == "/"
+        assert isinstance(cli.execute("ls /"), str)
+
+    def test_readonly_available_commands_excludes_writes(self):
+        cli = AgentCLI(readonly=True)
+        cmds = cli.available_commands()
+        for wc in ("mkdir", "touch", "write", "append", "rm", "cp", "mv"):
+            assert wc not in cmds
+        assert "pwd" in cmds
+        assert "cat" in cmds
+
+    def test_readonly_help_excludes_write_commands(self):
+        cli = AgentCLI(readonly=True)
+        result = cli.help()
+        assert "File Operations" not in result
+        assert "Navigation" in result
+        for wc in ("mkdir", "touch", "write", "append", "rm", "cp", "mv"):
+            assert wc not in result
+
+
+class TestAllowedCommands:
+    def test_only_allowed_commands_work(self):
+        cli = AgentCLI(allowed_commands={"pwd", "ls"})
+        assert cli.execute("pwd") == "/"
+        assert isinstance(cli.execute("ls /"), str)
+
+    def test_disallowed_commands_raise(self):
+        cli = AgentCLI(allowed_commands={"pwd", "ls"})
+        with pytest.raises(CommandError, match="command disabled: cat"):
+            cli.execute("cat /nonexist")
+
+    def test_available_commands_reflects_allowed(self):
+        cli = AgentCLI(allowed_commands={"pwd", "ls", "cat"})
+        assert cli.available_commands() == ["cat", "ls", "pwd"]
+
+
+class TestDisabledCommands:
+    def test_disabled_commands_blocked(self):
+        cli = AgentCLI(disabled_commands={"rm", "mv"})
+        with pytest.raises(CommandError, match="command disabled: rm"):
+            cli.execute("rm /x")
+        with pytest.raises(CommandError, match="command disabled: mv"):
+            cli.execute("mv /a /b")
+
+    def test_non_disabled_commands_work(self):
+        cli = AgentCLI(disabled_commands={"rm"})
+        assert cli.execute("pwd") == "/"
+
+    def test_available_commands_excludes_disabled(self):
+        cli = AgentCLI(disabled_commands={"rm", "mv"})
+        cmds = cli.available_commands()
+        assert "rm" not in cmds
+        assert "mv" not in cmds
+        assert "pwd" in cmds
+
+
+class TestCommandToggleValidation:
+    def test_both_allowed_and_disabled_raises_value_error(self):
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            AgentCLI(allowed_commands={"pwd"}, disabled_commands={"rm"})
+
+    def test_unknown_allowed_command_raises_value_error(self):
+        with pytest.raises(ValueError, match="unknown command.*in allowed_commands"):
+            AgentCLI(allowed_commands={"pwd", "bogus"})
+
+    def test_unknown_disabled_command_raises_value_error(self):
+        with pytest.raises(ValueError, match="unknown command.*in disabled_commands"):
+            AgentCLI(disabled_commands={"bogus"})
+
+    def test_readonly_overrides_allowed_commands(self):
+        cli = AgentCLI(readonly=True, allowed_commands={"pwd", "write", "cat"})
+        assert cli.execute("pwd") == "/"
+        with pytest.raises(CommandError, match="readonly mode"):
+            cli.execute("write /f hello")
+        assert "write" not in cli.available_commands()
+        assert "cat" in cli.available_commands()
+
+
+class TestCommandToggleSecurity:
+    def test_disabled_command_not_in_active_dict(self):
+        cli = AgentCLI(disabled_commands={"rm"})
+        assert "rm" not in cli._active_commands
+
+    def test_help_for_disabled_command_raises(self):
+        cli = AgentCLI(disabled_commands={"rm"})
+        with pytest.raises(CommandError, match="command disabled"):
+            cli.help("rm")
+
+    def test_help_via_execute_for_disabled_command_raises(self):
+        cli = AgentCLI(disabled_commands={"rm"})
+        with pytest.raises(CommandError, match="command disabled"):
+            cli.execute("help rm")
+
+
 class TestStructuredMode:
     def test_structured_ls(self):
         cli = AgentCLI(structured=True)
