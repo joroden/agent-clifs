@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shlex
+import uuid
 from collections.abc import Callable
 
 from agent_clifs.commands import COMMANDS
@@ -118,8 +119,90 @@ class AgentCLI:
         self.readonly = readonly
         self._formatter = LLMFormatter() if structured else None
 
+    # -- pipe helpers --------------------------------------------------
+
+    @staticmethod
+    def _split_pipes(command: str) -> list[str]:
+        """Split *command* on unquoted ``|`` characters.
+
+        Characters inside single or double quotes are never treated as
+        pipe operators.  Returns a list of raw command strings.
+        """
+        segments: list[str] = []
+        current: list[str] = []
+        in_single = False
+        in_double = False
+        i = 0
+        while i < len(command):
+            ch = command[i]
+            if ch == "\\" and not in_single and i + 1 < len(command):
+                current.append(ch)
+                current.append(command[i + 1])
+                i += 2
+                continue
+            if ch == "'" and not in_double:
+                in_single = not in_single
+            elif ch == '"' and not in_single:
+                in_double = not in_double
+            elif ch == "|" and not in_single and not in_double:
+                segments.append("".join(current))
+                current = []
+                i += 1
+                continue
+            current.append(ch)
+            i += 1
+        segments.append("".join(current))
+        return segments
+
+    def _execute_pipeline(self, segments: list[str]) -> str:
+        """Execute a multi-command pipeline.
+
+        Each segment's output is written to a temporary VFS file that is
+        appended as a file argument to the next segment.  Temp files are
+        always cleaned up.
+        """
+        # Validate segments
+        for idx, seg in enumerate(segments):
+            if not seg.strip():
+                if idx == 0:
+                    raise CommandError("syntax error: unexpected '|' at start of command")
+                if idx == len(segments) - 1:
+                    raise CommandError("syntax error: unexpected '|' at end of command")
+                raise CommandError("syntax error: empty command between pipes")
+
+        temp_files: list[str] = []
+        try:
+            result = self._execute_single(segments[0].strip())
+            for seg in segments[1:]:
+                tmp_path = f"/tmp/.pipe_{uuid.uuid4().hex}"
+                self.vfs.write_file(tmp_path, result)
+                temp_files.append(tmp_path)
+                cmd_str = f"{seg.strip()} {tmp_path}"
+                result = self._execute_single(cmd_str)
+            return result
+        finally:
+            for path in temp_files:
+                try:
+                    self.vfs.remove_file(path)
+                except VFSError:
+                    pass
+
+    # -- public API -----------------------------------------------------
+
     def execute(self, command: str) -> str:
-        """Execute a CLI command string and return the output."""
+        """Execute a CLI command string and return the output.
+
+        Supports pipelines: commands separated by unquoted ``|``
+        characters are executed left-to-right, with each command's
+        output piped to the next via a temporary VFS file.
+        """
+        segments = self._split_pipes(command)
+        if len(segments) > 1:
+            return self._execute_pipeline(segments)
+        return self._execute_single(command)
+
+    def _execute_single(self, command: str) -> str:
+        """Execute a single (non-piped) command string."""
         try:
             tokens = shlex.split(command)
         except ValueError as exc:

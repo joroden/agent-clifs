@@ -131,14 +131,14 @@ class TestCommandInjection:
         # The VFS must be untouched
         assert vfs.is_file("/important.txt")
 
-    def test_pipe_not_treated_as_pipeline(self, vfs):
-        """| is passed as a literal argument, not a shell pipe."""
-        vfs.write_file("/test.txt", "hello")
+    def test_pipe_works_as_pipeline(self, vfs):
+        """| is treated as a pipe operator."""
+        vfs.write_file("/test.txt", "hello world\nfoo bar\nbaz hello")
         cli = AgentCLI(vfs)
-        # 'cat /test.txt | grep hello' → cat gets args ['/test.txt', '|', 'grep', 'hello']
-        # cat will try to open the literal paths '|', 'grep', 'hello' and fail
-        with pytest.raises(CommandError):
-            cli.execute("cat /test.txt | grep hello")
+        result = cli.execute("cat /test.txt | grep hello")
+        assert "hello world" in result
+        assert "baz hello" in result
+        assert "foo bar" not in result
 
     def test_ampersand_not_background_operator(self, vfs):
         """&& is not treated as a logical AND shell operator."""
