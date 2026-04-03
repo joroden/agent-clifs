@@ -133,7 +133,7 @@ def cmd_ls(vfs: VirtualFileSystem, args: list[str]) -> str:
         except VFSError as exc:
             raise CommandError(f"ls: {exc}") from exc
 
-    return "\n\n".join(sections)
+    return "\n\n".join(sections) + "\n" if sections else ""
 
 
 def _ls_directory_entry(
