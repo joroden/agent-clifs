@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import argparse
 from typing import TYPE_CHECKING
 
+from agent_clifs.commands._parser import make_parser
 from agent_clifs.exceptions import CommandError, VFSError
 
 if TYPE_CHECKING:
@@ -13,25 +13,6 @@ if TYPE_CHECKING:
 _previous_dirs: dict[int, str] = {}
 
 
-# ------------------------------------------------------------------
-# Argparse helper
-# ------------------------------------------------------------------
-
-class _CommandArgumentParser(argparse.ArgumentParser):
-    """ArgumentParser that raises CommandError instead of calling sys.exit."""
-
-    def error(self, message: str) -> None:  # type: ignore[override]
-        raise CommandError(f"{self.prog}: {message}")
-
-    def exit(self, status: int = 0, message: str | None = None) -> None:  # type: ignore[override]
-        if message:
-            raise CommandError(message.strip())
-        raise CommandError("")
-
-
-def _make_parser(prog: str, description: str) -> _CommandArgumentParser:
-    return _CommandArgumentParser(prog=prog, description=description, add_help=False)
-
 
 # ------------------------------------------------------------------
 # pwd
@@ -39,7 +20,7 @@ def _make_parser(prog: str, description: str) -> _CommandArgumentParser:
 
 def cmd_pwd(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Print the current working directory."""
-    parser = _make_parser("pwd", "Print the current working directory")
+    parser = make_parser("pwd", "Print the current working directory")
     parser.parse_args(args)
     return vfs.cwd
 
@@ -50,7 +31,7 @@ def cmd_pwd(vfs: VirtualFileSystem, args: list[str]) -> str:
 
 def cmd_cd(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Change the current working directory."""
-    parser = _make_parser("cd", "Change the current working directory")
+    parser = make_parser("cd", "Change the current working directory")
     parser.add_argument("directory", nargs="?", default="/")
     parsed = parser.parse_args(args)
 
@@ -88,7 +69,7 @@ def _human_readable_size(size_bytes: int) -> str:
 
 def cmd_ls(vfs: VirtualFileSystem, args: list[str]) -> str:
     """List directory contents."""
-    parser = _make_parser("ls", "List directory contents")
+    parser = make_parser("ls", "List directory contents")
     parser.add_argument("paths", nargs="*", default=["."])
     parser.add_argument("-l", "--long", action="store_true")
     parser.add_argument("-a", "--all", action="store_true")
@@ -248,7 +229,7 @@ def _format_entry(
 
 def cmd_tree(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Display a tree visualization of the directory structure."""
-    parser = _make_parser("tree", "Display directory tree")
+    parser = make_parser("tree", "Display directory tree")
     parser.add_argument("path", nargs="?", default=".")
     parser.add_argument("-L", "--level", type=int, default=None)
     parser.add_argument("-d", "--dirs-only", action="store_true")

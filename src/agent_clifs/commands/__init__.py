@@ -12,7 +12,8 @@ if TYPE_CHECKING:
 from agent_clifs.commands.file_ops import cmd_append, cmd_cp, cmd_mkdir, cmd_mv, cmd_rm, cmd_touch, cmd_write
 from agent_clifs.commands.navigation import cmd_cd, cmd_ls, cmd_pwd, cmd_tree
 from agent_clifs.commands.read import cmd_cat, cmd_head, cmd_sed, cmd_tail, cmd_wc
-from agent_clifs.commands.search import cmd_find, cmd_grep
+from agent_clifs.commands.find import cmd_find
+from agent_clifs.commands.grep import cmd_grep
 
 COMMANDS: dict[str, Callable[[VirtualFileSystem, list[str]], str]] = {
     "pwd": cmd_pwd,

@@ -8,7 +8,7 @@ import uuid
 import pytest
 
 from agent_clifs import AgentCLI, VirtualFileSystem
-from agent_clifs.commands.search import cmd_grep
+from agent_clifs.commands.grep import cmd_grep
 from agent_clifs.exceptions import CommandError, VFSError
 
 

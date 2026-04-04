@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import argparse
 from typing import TYPE_CHECKING
 
+from agent_clifs.commands._parser import make_parser
 from agent_clifs.exceptions import (
     CommandError,
     FileExistsVFSError,
@@ -17,26 +17,6 @@ if TYPE_CHECKING:
     from agent_clifs.vfs import VirtualFileSystem
 
 
-# ------------------------------------------------------------------
-# Argument parsing helper
-# ------------------------------------------------------------------
-
-
-class _NoExitParser(argparse.ArgumentParser):
-    """ArgumentParser subclass that raises CommandError instead of exiting."""
-
-    def error(self, message: str) -> None:  # type: ignore[override]
-        raise CommandError(f"{self.prog}: {message}")
-
-    def exit(self, status: int = 0, message: str | None = None) -> None:  # type: ignore[override]
-        if message:
-            raise CommandError(message.strip())
-        raise CommandError(f"{self.prog}: unexpected exit")
-
-
-def _make_parser(prog: str, description: str) -> _NoExitParser:
-    return _NoExitParser(prog=prog, description=description, add_help=False)
-
 
 # ------------------------------------------------------------------
 # Commands
@@ -45,7 +25,7 @@ def _make_parser(prog: str, description: str) -> _NoExitParser:
 
 def cmd_mkdir(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Create directories."""
-    parser = _make_parser("mkdir", "Create directories")
+    parser = make_parser("mkdir", "Create directories")
     parser.add_argument("-p", "--parents", action="store_true")
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("paths", nargs="+", metavar="DIR")
@@ -74,7 +54,7 @@ def cmd_mkdir(vfs: VirtualFileSystem, args: list[str]) -> str:
 
 def cmd_touch(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Create files if they don't exist."""
-    parser = _make_parser("touch", "Create files")
+    parser = make_parser("touch", "Create files")
     parser.add_argument("-c", "--no-create", action="store_true")
     parser.add_argument("paths", nargs="+", metavar="FILE")
     ns = parser.parse_args(args)
@@ -118,7 +98,7 @@ def cmd_append(vfs: VirtualFileSystem, args: list[str]) -> str:
 
 def cmd_rm(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Remove files and directories."""
-    parser = _make_parser("rm", "Remove files and directories")
+    parser = make_parser("rm", "Remove files and directories")
     parser.add_argument("-r", "-R", "--recursive", action="store_true")
     parser.add_argument("-f", "--force", action="store_true")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -165,7 +145,7 @@ def cmd_rm(vfs: VirtualFileSystem, args: list[str]) -> str:
 
 def cmd_cp(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Copy files and directories."""
-    parser = _make_parser("cp", "Copy files and directories")
+    parser = make_parser("cp", "Copy files and directories")
     parser.add_argument("-r", "-R", "--recursive", action="store_true")
     parser.add_argument("-a", "--archive", action="store_true")
     parser.add_argument("-n", "--no-clobber", action="store_true")
@@ -249,7 +229,7 @@ def _copy_dir_recursive(
 
 def cmd_mv(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Move or rename files and directories."""
-    parser = _make_parser("mv", "Move files and directories")
+    parser = make_parser("mv", "Move files and directories")
     parser.add_argument("-f", "--force", action="store_true")
     parser.add_argument("-n", "--no-clobber", action="store_true")
     parser.add_argument("-v", "--verbose", action="store_true")
