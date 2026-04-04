@@ -174,9 +174,9 @@ def strip_pipe_path(output: str, pipe_path: str) -> str:
     result = []
     for line in lines:
         body = line.rstrip("\n\r")
-        eol = line[len(body):]
+        eol = line[len(body) :]
         if body.startswith(prefix):
-            body = body[len(prefix):].lstrip(" ")
+            body = body[len(prefix) :].lstrip(" ")
         elif body.endswith(suffix):
             body = body[: -len(suffix)]
         result.append(body + eol)

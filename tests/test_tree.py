@@ -39,6 +39,7 @@ class TestTreeLLMFormat:
 
     def _fmt(self, populated_vfs, args=None):
         from agent_clifs import AgentCLI
+
         cli = AgentCLI(populated_vfs, structured={"tree"})
         return cli.execute("tree " + " ".join(args or ["/"]))
 

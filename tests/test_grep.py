@@ -91,10 +91,16 @@ class TestGrep:
         assert "axb" not in lines
 
     def test_grep_multiple_patterns(self, populated_vfs):
-        result = cmd_grep(populated_vfs, [
-            "-e", "def", "-e", "return",
-            "/src/utils.py",
-        ])
+        result = cmd_grep(
+            populated_vfs,
+            [
+                "-e",
+                "def",
+                "-e",
+                "return",
+                "/src/utils.py",
+            ],
+        )
         assert "def helper():" in result
         assert "return 42" in result
 
@@ -136,7 +142,9 @@ class TestGrep:
     def test_f_multiple_pattern_files(self, populated_vfs):
         populated_vfs.write_file("/p1.txt", "def\n")
         populated_vfs.write_file("/p2.txt", "return\n")
-        result = cmd_grep(populated_vfs, ["-f", "/p1.txt", "-f", "/p2.txt", "/src/utils.py"])
+        result = cmd_grep(
+            populated_vfs, ["-f", "/p1.txt", "-f", "/p2.txt", "/src/utils.py"]
+        )
         assert "def helper():" in result
         assert "return 42" in result
 
@@ -167,8 +175,8 @@ class TestGrep:
         populated_vfs.write_file("/src/tests/deep/extra.py", "def extra(): pass\n")
         result = cmd_grep(populated_vfs, ["-r", "--max-depth=1", "def", "/src"])
         assert "/src/main.py" in result
-        assert "test_main.py" in result   # /src/tests/ is 1 level deep — included
-        assert "extra.py" not in result   # /src/tests/deep/ is 2 levels deep — pruned
+        assert "test_main.py" in result  # /src/tests/ is 1 level deep — included
+        assert "extra.py" not in result  # /src/tests/deep/ is 2 levels deep — pruned
 
     def test_max_depth_2_reaches_nested(self, populated_vfs):
         result = cmd_grep(populated_vfs, ["-r", "--max-depth=2", "def", "/src"])
@@ -186,9 +194,16 @@ class TestGrep:
 
     def test_exclude_dir_multiple(self, populated_vfs):
         populated_vfs.write_file("/src/vendor/lib.py", "def vendored(): pass\n")
-        result = cmd_grep(populated_vfs, [
-            "-r", "--exclude-dir=tests", "--exclude-dir=vendor", "def", "/src",
-        ])
+        result = cmd_grep(
+            populated_vfs,
+            [
+                "-r",
+                "--exclude-dir=tests",
+                "--exclude-dir=vendor",
+                "def",
+                "/src",
+            ],
+        )
         assert "main.py" in result
         assert "test_main.py" not in result
         assert "vendor" not in result
@@ -196,5 +211,5 @@ class TestGrep:
     def test_include_dir_limits_recursion(self, populated_vfs):
         populated_vfs.write_file("/src/vendor/lib.py", "def vendored(): pass\n")
         result = cmd_grep(populated_vfs, ["-r", "--include-dir=tests", "def", "/src"])
-        assert "test_main.py" in result    # /src/tests/ is whitelisted — included
-        assert "vendor" not in result      # /src/vendor/ is not whitelisted — pruned
+        assert "test_main.py" in result  # /src/tests/ is whitelisted — included
+        assert "vendor" not in result  # /src/vendor/ is not whitelisted — pruned

@@ -87,9 +87,17 @@ def _collect_files(
             for dirpath, dirs, filenames in vfs.walk(abs_path):
                 current_depth = dirpath.count("/") - base_depth
                 if exclude_dirs:
-                    dirs[:] = [d for d in dirs if not any(fnmatch.fnmatch(d, p) for p in exclude_dirs)]
+                    dirs[:] = [
+                        d
+                        for d in dirs
+                        if not any(fnmatch.fnmatch(d, p) for p in exclude_dirs)
+                    ]
                 if include_dirs:
-                    dirs[:] = [d for d in dirs if any(fnmatch.fnmatch(d, p) for p in include_dirs)]
+                    dirs[:] = [
+                        d
+                        for d in dirs
+                        if any(fnmatch.fnmatch(d, p) for p in include_dirs)
+                    ]
                 if max_depth is not None and current_depth >= max_depth:
                     dirs[:] = []
                 for fname in filenames:
@@ -110,8 +118,12 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
     parser.add_argument("-i", "-y", "--ignore-case", action="store_true")
     parser.add_argument("-n", "--line-number", action="store_true")
     parser.add_argument("-r", "-R", "--recursive", action="store_true")
-    parser.add_argument("-d", "--directories", choices=["read", "recurse", "skip"], default="read")
-    parser.add_argument("-f", "--file", action="append", dest="pattern_files", metavar="FILE")
+    parser.add_argument(
+        "-d", "--directories", choices=["read", "recurse", "skip"], default="read"
+    )
+    parser.add_argument(
+        "-f", "--file", action="append", dest="pattern_files", metavar="FILE"
+    )
     parser.add_argument("-l", "--files-with-matches", action="store_true")
     parser.add_argument("-L", "--files-without-match", action="store_true")
     parser.add_argument("-c", "--count", action="store_true")
@@ -126,9 +138,15 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
     parser.add_argument("-h", "--no-filename", action="store_true")
     parser.add_argument("--include", dest="include")
     parser.add_argument("--exclude", dest="exclude")
-    parser.add_argument("--include-dir", action="append", dest="include_dirs", metavar="GLOB")
-    parser.add_argument("--exclude-dir", action="append", dest="exclude_dirs", metavar="GLOB")
-    parser.add_argument("--max-depth", type=int, default=None, dest="max_depth", metavar="N")
+    parser.add_argument(
+        "--include-dir", action="append", dest="include_dirs", metavar="GLOB"
+    )
+    parser.add_argument(
+        "--exclude-dir", action="append", dest="exclude_dirs", metavar="GLOB"
+    )
+    parser.add_argument(
+        "--max-depth", type=int, default=None, dest="max_depth", metavar="N"
+    )
     parser.add_argument("-A", "--after-context", type=int, default=0)
     parser.add_argument("-B", "--before-context", type=int, default=0)
     parser.add_argument("-C", "--context", type=int, default=0)
@@ -161,7 +179,9 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
         for fpath in opts.pattern_files:
             abs_fpath = vfs.resolve_path(fpath)
             try:
-                raw_patterns.extend(line for line in vfs.read_file(abs_fpath).splitlines() if line)
+                raw_patterns.extend(
+                    line for line in vfs.read_file(abs_fpath).splitlines() if line
+                )
             except Exception:
                 raise CommandError(f"grep: {fpath}: No such file or directory")
     if opts.pattern is not None and not opts.patterns and not opts.pattern_files:
@@ -194,7 +214,9 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
 
     try:
         files = _collect_files(
-            vfs, opts.paths, opts.recursive,
+            vfs,
+            opts.paths,
+            opts.recursive,
             max_depth=opts.max_depth,
             exclude_dirs=opts.exclude_dirs,
             include_dirs=opts.include_dirs,
@@ -206,9 +228,13 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
         raise
 
     if opts.include:
-        files = [f for f in files if fnmatch.fnmatch(f.rsplit("/", 1)[-1], opts.include)]
+        files = [
+            f for f in files if fnmatch.fnmatch(f.rsplit("/", 1)[-1], opts.include)
+        ]
     if opts.exclude:
-        files = [f for f in files if not fnmatch.fnmatch(f.rsplit("/", 1)[-1], opts.exclude)]
+        files = [
+            f for f in files if not fnmatch.fnmatch(f.rsplit("/", 1)[-1], opts.exclude)
+        ]
 
     if opts.no_filename:
         show_prefix = False

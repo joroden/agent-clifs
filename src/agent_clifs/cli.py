@@ -6,7 +6,12 @@ import shlex
 import uuid
 from collections.abc import Callable
 
-from agent_clifs._io import RedirectInfo, extract_redirection, split_pipes, strip_pipe_path
+from agent_clifs._io import (
+    RedirectInfo,
+    extract_redirection,
+    split_pipes,
+    strip_pipe_path,
+)
 from agent_clifs.commands import COMMANDS
 from agent_clifs.exceptions import CommandError, VFSError
 from agent_clifs.formatters import LLMFormatter
@@ -143,7 +148,9 @@ class AgentCLI:
         for idx, seg in enumerate(segments):
             if not seg.strip():
                 if idx == 0:
-                    raise CommandError("syntax error: unexpected '|' at start of command")
+                    raise CommandError(
+                        "syntax error: unexpected '|' at start of command"
+                    )
                 if idx == len(segments) - 1:
                     raise CommandError("syntax error: unexpected '|' at end of command")
                 raise CommandError("syntax error: empty command between pipes")
@@ -201,9 +208,7 @@ class AgentCLI:
             return ""
 
         if self.readonly:
-            raise CommandError(
-                "redirection to file disabled in readonly mode"
-            )
+            raise CommandError("redirection to file disabled in readonly mode")
 
         try:
             if redirect.append:
@@ -235,12 +240,12 @@ class AgentCLI:
             # Distinguish disabled from truly unknown
             if name in COMMANDS:
                 if self.readonly and name in WRITE_COMMANDS:
-                    raise CommandError(
-                        f"command disabled: {name} (readonly mode)"
-                    )
+                    raise CommandError(f"command disabled: {name} (readonly mode)")
                 raise CommandError(f"command disabled: {name}")
             available = ", ".join(sorted(self._active_commands))
-            raise CommandError(f"unknown command: {name}\nAvailable commands: {available}")
+            raise CommandError(
+                f"unknown command: {name}\nAvailable commands: {available}"
+            )
 
         try:
             result = fn(self.vfs, args)

@@ -8,11 +8,24 @@ from collections import OrderedDict
 from agent_clifs.vfs import VirtualFileSystem
 
 
-_PASSTHROUGH_COMMANDS = frozenset({
-    "cat", "head", "tail", "view",
-    "pwd", "cd", "mkdir", "touch", "write", "append",
-    "rm", "cp", "mv", "help",
-})
+_PASSTHROUGH_COMMANDS = frozenset(
+    {
+        "cat",
+        "head",
+        "tail",
+        "view",
+        "pwd",
+        "cd",
+        "mkdir",
+        "touch",
+        "write",
+        "append",
+        "rm",
+        "cp",
+        "mv",
+        "help",
+    }
+)
 
 
 class LLMFormatter:
@@ -29,7 +42,9 @@ class LLMFormatter:
     def __init__(self, commands: frozenset[str] | None = None) -> None:
         self._enabled: frozenset[str] | None = commands
 
-    def format(self, command: str, args: list[str], output: str, vfs: VirtualFileSystem) -> str:
+    def format(
+        self, command: str, args: list[str], output: str, vfs: VirtualFileSystem
+    ) -> str:
         """Format command output for LLM consumption."""
         if self._enabled is not None and command not in self._enabled:
             return output
@@ -97,8 +112,7 @@ class LLMFormatter:
     # ------------------------------------------------------------------
 
     def _format_tree(self, args: list[str], output: str, vfs: VirtualFileSystem) -> str:
-        """Format tree output as sorted full paths with type and size annotations.
-        """
+        """Format tree output as sorted full paths with type and size annotations."""
         if not output.strip():
             return output
 
@@ -184,11 +198,11 @@ class LLMFormatter:
         depth = 0
         pos = 0
         while pos < len(line):
-            if line[pos:pos + 4] in ("├── ", "└── "):
+            if line[pos : pos + 4] in ("├── ", "└── "):
                 depth += 1
                 pos += 4
                 break
-            elif line[pos:pos + 4] in ("│   ", "    "):
+            elif line[pos : pos + 4] in ("│   ", "    "):
                 depth += 1
                 pos += 4
             else:
