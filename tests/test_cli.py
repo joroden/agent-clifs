@@ -263,3 +263,64 @@ class TestStructuredMode:
         cli = AgentCLI(structured=True)
         assert cli.structured is True
         assert cli._formatter is not None
+
+
+class TestPerCommandStructured:
+    """structured= accepts a set to enable formatting only for named commands."""
+
+    def test_set_formats_only_listed_commands(self, populated_vfs):
+        cli = AgentCLI(populated_vfs, structured={"tree"})
+        tree_out = cli.execute("tree /src")
+        ls_out = cli.execute("ls /src")
+        # tree should be formatted (full paths, no box chars)
+        assert "[file] /src/main.py" in tree_out
+        assert "├" not in tree_out
+        # ls should NOT be formatted (no [file]/[dir] prefix)
+        assert "[file]" not in ls_out
+        assert "[dir]" not in ls_out
+
+    def test_true_formats_all_commands(self, populated_vfs):
+        cli = AgentCLI(populated_vfs, structured=True)
+        ls_out = cli.execute("ls /src")
+        assert "[file]" in ls_out or "[dir]" in ls_out
+
+    def test_false_formats_nothing(self, populated_vfs):
+        cli = AgentCLI(populated_vfs, structured=False)
+        ls_out = cli.execute("ls /src")
+        assert "[file]" not in ls_out
+        assert "[dir]" not in ls_out
+
+    def test_empty_set_formats_nothing(self, populated_vfs):
+        cli = AgentCLI(populated_vfs, structured=set())
+        tree_out = cli.execute("tree /src")
+        assert "[file]" not in tree_out
+
+    def test_frozenset_accepted(self, populated_vfs):
+        cli = AgentCLI(populated_vfs, structured=frozenset({"grep"}))
+        result = cli.execute("grep -rn def /src")
+        assert "[/src" in result  # LLM grep format groups by file
+
+    def test_set_find_only(self, populated_vfs):
+        cli = AgentCLI(populated_vfs, structured={"find"})
+        find_out = cli.execute("find /src -type f")
+        ls_out = cli.execute("ls /src")
+        # find should be formatted
+        assert "[file]" in find_out
+        # ls should NOT be formatted
+        assert "[file]" not in ls_out
+        assert "[dir]" not in ls_out
+
+    def test_set_wc_only(self, populated_vfs):
+        cli = AgentCLI(populated_vfs, structured={"wc"})
+        wc_out = cli.execute("wc /src/main.py")
+        tree_out = cli.execute("tree /src")
+        # wc should be formatted (labeled)
+        assert "lines" in wc_out
+        assert "words" in wc_out
+        # tree should NOT be formatted (still has box chars)
+        assert "├" in tree_out or "└" in tree_out
+
+    def test_structured_attribute_stored(self, populated_vfs):
+        s = {"tree", "grep"}
+        cli = AgentCLI(populated_vfs, structured=s)
+        assert cli.structured == s
