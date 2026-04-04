@@ -2,6 +2,29 @@
 
 <!-- version list -->
 
+## v1.2.0 (2026-04-04)
+
+### Chores
+
+- Apply proper formatting to all files
+  ([`92aa961`](https://github.com/joroden/agent-clifs/commit/92aa961ef9a767d0292b0c43e3c7c727c64498fd))
+
+### Documentation
+
+- Update readme
+  ([`6b46f64`](https://github.com/joroden/agent-clifs/commit/6b46f64305e2321cfe6e361f8f5cbd196b35723d))
+
+### Features
+
+- Enable formatting per command and update tree llm output
+  ([`2200153`](https://github.com/joroden/agent-clifs/commit/220015356d0a5d542e4ca748209823cbfdf33272))
+
+### Refactoring
+
+- Split commands and cli into more managable chunks
+  ([`bebf44f`](https://github.com/joroden/agent-clifs/commit/bebf44f28312f604e636a91ea499addb2cd99b19))
+
+
 ## v1.1.2 (2026-04-03)
 
 ### Bug Fixes
