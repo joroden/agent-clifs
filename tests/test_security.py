@@ -26,6 +26,7 @@ def cli(vfs):
 # ReDoS (Regular Expression Denial of Service)
 # ------------------------------------------------------------------
 
+
 class TestReDoS:
     """grep statically rejects patterns with nested quantifiers."""
 
@@ -76,6 +77,7 @@ class TestReDoS:
 # Path traversal
 # ------------------------------------------------------------------
 
+
 class TestPathTraversal:
     """Traversal attempts cannot escape the VFS root."""
 
@@ -116,6 +118,7 @@ class TestPathTraversal:
 # ------------------------------------------------------------------
 # Command injection via execute()
 # ------------------------------------------------------------------
+
 
 class TestCommandInjection:
     """shlex parsing prevents shell metacharacters from being interpreted."""
@@ -162,6 +165,7 @@ class TestCommandInjection:
 # ------------------------------------------------------------------
 # Null bytes and unusual input
 # ------------------------------------------------------------------
+
 
 class TestNullBytesAndEdgeCases:
     """Unusual input is handled gracefully."""

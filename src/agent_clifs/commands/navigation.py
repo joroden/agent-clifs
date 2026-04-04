@@ -13,10 +13,10 @@ if TYPE_CHECKING:
 _previous_dirs: dict[int, str] = {}
 
 
-
 # ------------------------------------------------------------------
 # pwd
 # ------------------------------------------------------------------
+
 
 def cmd_pwd(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Print the current working directory."""
@@ -28,6 +28,7 @@ def cmd_pwd(vfs: VirtualFileSystem, args: list[str]) -> str:
 # ------------------------------------------------------------------
 # cd
 # ------------------------------------------------------------------
+
 
 def cmd_cd(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Change the current working directory."""
@@ -56,6 +57,7 @@ def cmd_cd(vfs: VirtualFileSystem, args: list[str]) -> str:
 # ------------------------------------------------------------------
 # ls
 # ------------------------------------------------------------------
+
 
 def _human_readable_size(size_bytes: int) -> str:
     for unit in ("", "K", "M", "G", "T"):
@@ -89,28 +91,42 @@ def cmd_ls(vfs: VirtualFileSystem, args: list[str]) -> str:
         try:
             resolved = vfs.resolve_path(path)
             if parsed.directory:
-                sections.append(_ls_directory_entry(vfs, path, parsed.long, parsed.human_readable))
+                sections.append(
+                    _ls_directory_entry(vfs, path, parsed.long, parsed.human_readable)
+                )
             elif vfs.is_file(resolved):
                 name = resolved.rsplit("/", 1)[-1]
-                sections.append(_format_entry(vfs, resolved, name, parsed.long, parsed.human_readable))
+                sections.append(
+                    _format_entry(
+                        vfs, resolved, name, parsed.long, parsed.human_readable
+                    )
+                )
             elif parsed.recursive:
-                sections.append(_ls_recursive(
-                    vfs, path, parsed.long,
-                    show_header=multiple,
-                    human=parsed.human_readable,
-                    sort_size=parsed.sort_size,
-                    show_all=parsed.all,
-                    reverse=parsed.reverse,
-                ))
+                sections.append(
+                    _ls_recursive(
+                        vfs,
+                        path,
+                        parsed.long,
+                        show_header=multiple,
+                        human=parsed.human_readable,
+                        sort_size=parsed.sort_size,
+                        show_all=parsed.all,
+                        reverse=parsed.reverse,
+                    )
+                )
             else:
-                sections.append(_ls_single(
-                    vfs, path, parsed.long,
-                    show_header=multiple,
-                    human=parsed.human_readable,
-                    sort_size=parsed.sort_size,
-                    show_all=parsed.all,
-                    reverse=parsed.reverse,
-                ))
+                sections.append(
+                    _ls_single(
+                        vfs,
+                        path,
+                        parsed.long,
+                        show_header=multiple,
+                        human=parsed.human_readable,
+                        sort_size=parsed.sort_size,
+                        show_all=parsed.all,
+                        reverse=parsed.reverse,
+                    )
+                )
         except VFSError as exc:
             raise CommandError(f"ls: {exc}") from exc
 
@@ -132,13 +148,16 @@ def _ls_directory_entry(
     return _format_entry(vfs, resolved, display, long, human)
 
 
-def _sort_entries_by_size(vfs: VirtualFileSystem, dirpath: str, names: list[str]) -> list[str]:
+def _sort_entries_by_size(
+    vfs: VirtualFileSystem, dirpath: str, names: list[str]
+) -> list[str]:
     def size_key(name: str) -> int:
         child_path = dirpath.rstrip("/") + "/" + name
         info = vfs.stat(child_path)
         if info["type"] == "file":
             return info["size"]
         return info["children"]
+
     return sorted(names, key=size_key, reverse=True)
 
 
@@ -214,7 +233,11 @@ def _format_entry(
     if vfs.is_dir(full_path):
         if long:
             info = vfs.stat(full_path)
-            return f"d  {info['children']}  {name}/" if not name.endswith("/") else f"d  {info['children']}  {name}"
+            return (
+                f"d  {info['children']}  {name}/"
+                if not name.endswith("/")
+                else f"d  {info['children']}  {name}"
+            )
         return f"{name}/" if not name.endswith("/") else name
     if long:
         info = vfs.stat(full_path)
@@ -226,6 +249,7 @@ def _format_entry(
 # ------------------------------------------------------------------
 # tree
 # ------------------------------------------------------------------
+
 
 def cmd_tree(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Display a tree visualization of the directory structure."""
@@ -293,7 +317,13 @@ def _tree_walk(
             dir_count += 1
             child_prefix = prefix + ("    " if is_last else "│   ")
             d, f = _tree_walk(
-                vfs, child_path, child_prefix, max_level, current_level + 1, dirs_only, lines
+                vfs,
+                child_path,
+                child_prefix,
+                max_level,
+                current_level + 1,
+                dirs_only,
+                lines,
             )
             dir_count += d
             file_count += f

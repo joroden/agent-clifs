@@ -106,10 +106,20 @@ class TestFullWorkflow:
 class TestReadonlyMode:
     def test_readonly_blocks_write_commands(self):
         cli = AgentCLI(readonly=True)
-        write_cmds = ["mkdir /d", "touch /f", "write /f hello", "append /f x", "rm /f", "cp /a /b", "mv /a /b"]
+        write_cmds = [
+            "mkdir /d",
+            "touch /f",
+            "write /f hello",
+            "append /f x",
+            "rm /f",
+            "cp /a /b",
+            "mv /a /b",
+        ]
         for cmd in write_cmds:
             name = cmd.split()[0]
-            with pytest.raises(CommandError, match=f"command disabled: {name} \\(readonly mode\\)"):
+            with pytest.raises(
+                CommandError, match=f"command disabled: {name} \\(readonly mode\\)"
+            ):
                 cli.execute(cmd)
 
     def test_readonly_allows_read_commands(self):

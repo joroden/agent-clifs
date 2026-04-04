@@ -145,7 +145,7 @@ class VirtualFileSystem:
         old_dirs: list[str] = []
         for d in list(self._dirs):
             if d == sp or d.startswith(prefix):
-                suffix = d[len(sp):]
+                suffix = d[len(sp) :]
                 new_dirs.append(dp + suffix)
                 old_dirs.append(d)
 
@@ -153,7 +153,7 @@ class VirtualFileSystem:
         old_file_keys: list[str] = []
         for f in list(self._files):
             if f.startswith(prefix):
-                suffix = f[len(sp):]
+                suffix = f[len(sp) :]
                 new_files[dp + suffix] = self._files[f]
                 old_file_keys.append(f)
 
@@ -236,13 +236,13 @@ class VirtualFileSystem:
 
         for f in self._files:
             if f.startswith(prefix):
-                rest = f[len(prefix):]
+                rest = f[len(prefix) :]
                 if rest:
                     names.add(rest.split("/", 1)[0])
 
         for d in self._dirs:
             if d.startswith(prefix) and d != p:
-                rest = d[len(prefix):]
+                rest = d[len(prefix) :]
                 if rest:
                     names.add(rest.split("/", 1)[0])
 
@@ -286,13 +286,13 @@ class VirtualFileSystem:
 
         for d in sorted(self._dirs):
             if d.startswith(prefix) and d != t:
-                rest = d[len(prefix):]
+                rest = d[len(prefix) :]
                 if "/" not in rest:
                     child_dirs.append(rest)
 
         for f in sorted(self._files):
             if f.startswith(prefix):
-                rest = f[len(prefix):]
+                rest = f[len(prefix) :]
                 if "/" not in rest and rest:
                     child_files.append(rest)
 

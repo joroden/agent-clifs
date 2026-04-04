@@ -31,6 +31,7 @@ class TestCd:
 
     def test_cd_dash_no_previous_raises(self, populated_vfs):
         from agent_clifs.commands.navigation import _previous_dirs
+
         _previous_dirs.pop(id(populated_vfs), None)
         with pytest.raises(CommandError, match="no previous directory"):
             cmd_cd(populated_vfs, ["-"])

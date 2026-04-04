@@ -73,7 +73,7 @@ class TestOutputRedirection:
 
     def test_redirect_with_pipe(self, cli, vfs):
         vfs.write_file("/data.txt", "hello world\nfoo bar\nhello again\n")
-        cli.execute('cat /data.txt | grep hello > /output.txt')
+        cli.execute("cat /data.txt | grep hello > /output.txt")
         content = vfs.read_file("/output.txt")
         assert "hello" in content
 

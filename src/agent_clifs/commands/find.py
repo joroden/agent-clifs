@@ -17,11 +17,30 @@ if TYPE_CHECKING:
 # ------------------------------------------------------------------
 
 # Tokens that signal the start of a find expression (vs. a starting path).
-_FIND_EXPR_TOKENS: frozenset[str] = frozenset({
-    "-name", "-iname", "-type", "-path", "-maxdepth", "-mindepth",
-    "-size", "-empty", "-newer", "-print", "-delete", "-exec",
-    "-not", "-a", "-and", "-o", "-or", "!", "(", ")"
-})
+_FIND_EXPR_TOKENS: frozenset[str] = frozenset(
+    {
+        "-name",
+        "-iname",
+        "-type",
+        "-path",
+        "-maxdepth",
+        "-mindepth",
+        "-size",
+        "-empty",
+        "-newer",
+        "-print",
+        "-delete",
+        "-exec",
+        "-not",
+        "-a",
+        "-and",
+        "-o",
+        "-or",
+        "!",
+        "(",
+        ")",
+    }
+)
 
 
 def _make_size_pred(spec: str, vfs: "VirtualFileSystem"):  # type: ignore[return]
@@ -32,8 +51,13 @@ def _make_size_pred(spec: str, vfs: "VirtualFileSystem"):  # type: ignore[return
     cmp_op, num_s, unit = m.groups()
     num = int(num_s)
     unit_bytes: dict[str, int] = {
-        "": 512, "b": 512, "c": 1, "w": 2,
-        "k": 1024, "M": 1024 * 1024, "G": 1024 * 1024 * 1024,
+        "": 512,
+        "b": 512,
+        "c": 1,
+        "w": 2,
+        "k": 1024,
+        "M": 1024 * 1024,
+        "G": 1024 * 1024 * 1024,
     }
     factor = unit_bytes[unit]
 
@@ -247,6 +271,7 @@ class _FindParser:
 # find
 # ------------------------------------------------------------------
 
+
 def cmd_find(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Find files and directories matching given criteria."""
     # Split leading positional arguments (starting paths) from the expression.
@@ -276,13 +301,13 @@ def cmd_find(vfs: VirtualFileSystem, args: list[str]) -> str:
         def _disp(p: str, _a=abs_start, _s=start, _r=use_rel) -> str:
             if p == _a:
                 return _s if _r else p
-            suffix = p[len(_a):] if _a != "/" else p
+            suffix = p[len(_a) :] if _a != "/" else p
             return (_s.rstrip("/") + suffix) if _r else p
 
         def _depth(p: str, _a=abs_start) -> int:
             if p == _a:
                 return 0
-            seg = p[len(_a):] if _a != "/" else p
+            seg = p[len(_a) :] if _a != "/" else p
             return seg.count("/")
 
         for dirpath, _dirnames, filenames in vfs.walk(abs_start):

@@ -8,7 +8,9 @@ from agent_clifs.exceptions import CommandError
 class TestCp:
     def test_cp_file(self, populated_vfs):
         cmd_cp(populated_vfs, ["/src/utils.py", "/src/utils_copy.py"])
-        assert populated_vfs.read_file("/src/utils_copy.py") == populated_vfs.read_file("/src/utils.py")
+        assert populated_vfs.read_file("/src/utils_copy.py") == populated_vfs.read_file(
+            "/src/utils.py"
+        )
 
     def test_cp_recursive_dir(self, populated_vfs):
         cmd_cp(populated_vfs, ["-r", "/docs", "/docs_backup"])
