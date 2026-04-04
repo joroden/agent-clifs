@@ -2,30 +2,15 @@
 
 from __future__ import annotations
 
-import argparse
 import re
 from typing import TYPE_CHECKING
 
+from agent_clifs.commands._parser import make_parser
 from agent_clifs.exceptions import CommandError, VFSError
 
 if TYPE_CHECKING:
     from agent_clifs.vfs import VirtualFileSystem
 
-
-class _ErrorRaisingParser(argparse.ArgumentParser):
-    """ArgumentParser that raises CommandError instead of calling sys.exit."""
-
-    def error(self, message: str) -> None:  # type: ignore[override]
-        raise CommandError(f"{self.prog}: {message}")
-
-    def exit(self, status: int = 0, message: str | None = None) -> None:  # type: ignore[override]
-        if status:
-            raise CommandError(message or f"{self.prog}: exit {status}")
-        raise CommandError(message or "")
-
-
-def _make_parser(prog: str, description: str) -> _ErrorRaisingParser:
-    return _ErrorRaisingParser(prog=prog, description=description, add_help=False)
 
 
 def _read(vfs: VirtualFileSystem, path: str, cmd: str) -> str:
@@ -43,7 +28,7 @@ def _read(vfs: VirtualFileSystem, path: str, cmd: str) -> str:
 
 def cmd_cat(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Concatenate and print files."""
-    parser = _make_parser("cat", "Concatenate and print files")
+    parser = make_parser("cat", "Concatenate and print files")
     parser.add_argument("-n", "--number", action="store_true", help="number all output lines")
     parser.add_argument("-b", "--number-nonblank", action="store_true",
                         help="number non-empty output lines (overrides -n)")
@@ -94,7 +79,7 @@ def cmd_cat(vfs: VirtualFileSystem, args: list[str]) -> str:
 
 def cmd_head(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Display the first lines of files."""
-    parser = _make_parser("head", "Display the first lines of a file")
+    parser = make_parser("head", "Display the first lines of a file")
     parser.add_argument("-n", "--lines", type=int, default=10, metavar="N")
     parser.add_argument("-c", "--bytes", type=int, default=None, metavar="N",
                         help="print the first N bytes")
@@ -126,7 +111,7 @@ def cmd_head(vfs: VirtualFileSystem, args: list[str]) -> str:
 
 def cmd_tail(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Display the last lines of files."""
-    parser = _make_parser("tail", "Display the last lines of a file")
+    parser = make_parser("tail", "Display the last lines of a file")
     parser.add_argument("-n", "--lines", default="10", metavar="N",
                         help="number of lines (or +N to start from line N)")
     parser.add_argument("-c", "--bytes", type=int, default=None, metavar="N",
@@ -176,7 +161,7 @@ def cmd_tail(vfs: VirtualFileSystem, args: list[str]) -> str:
 
 def cmd_wc(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Print newline, word, and byte counts for files."""
-    parser = _make_parser("wc", "Print newline, word, and byte counts")
+    parser = make_parser("wc", "Print newline, word, and byte counts")
     parser.add_argument("-l", "--lines", action="store_true", help="print the newline counts")
     parser.add_argument("-w", "--words", action="store_true", help="print the word counts")
     parser.add_argument("-c", "--bytes", action="store_true", help="print the byte counts")
@@ -330,7 +315,7 @@ def _sed_range_matches(
 
 def cmd_sed(vfs: VirtualFileSystem, args: list[str]) -> str:
     """Basic stream editor for viewing file content."""
-    parser = _make_parser("sed", "Stream editor")
+    parser = make_parser("sed", "Stream editor")
     parser.add_argument("-n", "--quiet", "--silent", action="store_true", dest="quiet")
     parser.add_argument("-e", "--expression", action="append", dest="scripts", metavar="SCRIPT")
     parser.add_argument("positional", nargs="*")

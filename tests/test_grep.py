@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from agent_clifs.commands.search import cmd_grep
+from agent_clifs.commands.grep import cmd_grep
 from agent_clifs.exceptions import CommandError
 
 
