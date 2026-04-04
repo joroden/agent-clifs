@@ -60,16 +60,21 @@ class AgentCLI:
         self,
         vfs: VirtualFileSystem | None = None,
         *,
-        structured: bool = False,
+        structured: bool | set[str] | frozenset[str] = False,
         readonly: bool = False,
         allowed_commands: set[str] | None = None,
         disabled_commands: set[str] | None = None,
     ) -> None:
         """Initialize with an optional existing VFS.
 
-        When *structured* is ``True``, command output is post-processed
-        by :class:`~agent_clifs.formatters.LLMFormatter` for cleaner,
-        more token-efficient output optimized for LLM consumption.
+        *structured* controls LLM-optimized output post-processing:
+
+        * ``True`` — apply :class:`~agent_clifs.formatters.LLMFormatter`
+          to all supported commands (``ls``, ``tree``, ``grep``,
+          ``find``, ``wc``).
+        * A :class:`set` of command names — apply formatting only to
+          those commands, e.g. ``structured={"tree", "grep"}``.
+        * ``False`` (default) — no formatting applied.
 
         When *readonly* is ``True``, all write commands (mkdir, touch,
         write, append, rm, cp, mv) are disabled.
@@ -118,7 +123,12 @@ class AgentCLI:
         self.vfs = vfs or VirtualFileSystem()
         self.structured = structured
         self.readonly = readonly
-        self._formatter = LLMFormatter() if structured else None
+        if structured is True:
+            self._formatter: LLMFormatter | None = LLMFormatter()
+        elif structured:  # non-empty set/frozenset
+            self._formatter = LLMFormatter(commands=frozenset(structured))
+        else:
+            self._formatter = None
 
     # -- pipe helpers --------------------------------------------------
 

@@ -367,3 +367,4 @@ def cmd_sed(vfs: VirtualFileSystem, args: list[str]) -> str:
                 output.append(line)
 
     return "\n".join(output)
+

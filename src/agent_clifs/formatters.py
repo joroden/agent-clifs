@@ -20,10 +20,20 @@ class LLMFormatter:
 
     The formatter post-processes command output to be more structured
     and token-efficient for LLM consumption.
+
+    When *commands* is provided, only those commands are formatted;
+    all others pass through unchanged.  Pass ``None`` (the default) to
+    format every supported command.
     """
+
+    def __init__(self, commands: frozenset[str] | None = None) -> None:
+        self._enabled: frozenset[str] | None = commands
 
     def format(self, command: str, args: list[str], output: str, vfs: VirtualFileSystem) -> str:
         """Format command output for LLM consumption."""
+        if self._enabled is not None and command not in self._enabled:
+            return output
+
         if command in _PASSTHROUGH_COMMANDS:
             return output
 
@@ -87,7 +97,8 @@ class LLMFormatter:
     # ------------------------------------------------------------------
 
     def _format_tree(self, args: list[str], output: str, vfs: VirtualFileSystem) -> str:
-        """Format tree output into indentation-based listing."""
+        """Format tree output as sorted full paths with type and size annotations.
+        """
         if not output.strip():
             return output
 
@@ -95,7 +106,6 @@ class LLMFormatter:
         if not raw_lines:
             return output
 
-        result_lines: list[str] = []
         summary_line: str | None = None
 
         # The last non-empty line is the summary (e.g. "3 directories, 2 files")
@@ -106,27 +116,55 @@ class LLMFormatter:
             summary_line = raw_lines[idx].strip()
             tree_lines = raw_lines[:idx]
         else:
-            tree_lines = raw_lines
+            tree_lines = list(raw_lines)
 
-        # Strip trailing blank lines from tree section
         while tree_lines and not tree_lines[-1].strip():
             tree_lines.pop()
 
-        for i, line in enumerate(tree_lines):
-            if i == 0:
-                # Root line — ensure trailing slash for directories
-                root = line.strip()
-                if not root.endswith("/"):
-                    root += "/"
-                result_lines.append(root)
-                continue
+        if not tree_lines:
+            return output
 
+        root = tree_lines[0].strip().rstrip("/")
+
+        path_stack: list[str] = [root]
+        entries: list[tuple[str, bool]] = []  # (absolute_path, is_dir)
+
+        for line in tree_lines[1:]:
             depth, name = self._parse_tree_line(line)
-            indent = "  " * depth
-            result_lines.append(f"{indent}{name}")
+            is_dir = name.endswith("/")
+            clean_name = name.rstrip("/")
+
+            # Pop to the correct parent depth before appending
+            while len(path_stack) > depth:
+                path_stack.pop()
+
+            parent = path_stack[-1]
+            full_path = f"{parent.rstrip('/')}/{clean_name}"
+
+            if is_dir:
+                path_stack.append(full_path)
+
+            entries.append((full_path, is_dir))
+
+        entries.sort(key=lambda x: x[0])
+
+        result_lines: list[str] = []
+        for full_path, is_dir in entries:
+            if is_dir:
+                result_lines.append(f"[dir] {full_path}")
+            else:
+                line_hint = ""
+                try:
+                    content = vfs.read_file(full_path)
+                    n = content.count("\n")
+                    if content and not content.endswith("\n"):
+                        n += 1
+                    line_hint = f"  ({n} lines)"
+                except Exception:
+                    pass
+                result_lines.append(f"[file] {full_path}{line_hint}")
 
         if summary_line:
-            # Extract counts from summary
             dirs_match = re.search(r"(\d+)\s+director", summary_line)
             files_match = re.search(r"(\d+)\s+file", summary_line)
             dir_count = int(dirs_match.group(1)) if dirs_match else 0
