@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.0 (2026-04-05)
+
+### Features
+
+- Implement optional bm25 ranking for grep
+  ([`48b821f`](https://github.com/joroden/agent-clifs/commit/48b821f36cdc8706f5d071df0b42cfa19f916450))
+
+
 ## v1.2.1 (2026-04-05)
 
 ### Bug Fixes
