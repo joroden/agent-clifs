@@ -37,6 +37,40 @@ def _check_for_redos(pattern: str) -> None:
         )
 
 
+def _normalize_bre_escapes(pattern: str) -> str:
+    """Translate BRE metacharacter escapes to Python *re* (ERE-like) syntax.
+
+    Real grep defaults to BRE where ``\\|``, ``\\+``, ``\\?``, ``\\(``, and
+    ``\\)`` are the special operators.  Python's *re* uses ERE-style syntax
+    where those operators are written without the leading backslash.  An LLM
+    that generates BRE-style patterns will produce patterns that compile but
+    match incorrectly (or not at all) in Python *re* without this step.
+
+    ``\\\\`` (escaped backslash) is kept intact so literal-backslash patterns
+    round-trip correctly.
+    """
+    result: list[str] = []
+    i = 0
+    while i < len(pattern):
+        if pattern[i] == "\\" and i + 1 < len(pattern):
+            next_char = pattern[i + 1]
+            if next_char == "\\":
+                result.append("\\\\")
+                i += 2
+            elif next_char in "|+?()":
+                # BRE operator — drop the backslash prefix, keep the char
+                result.append(next_char)
+                i += 2
+            else:
+                result.append("\\")
+                result.append(next_char)
+                i += 2
+        else:
+            result.append(pattern[i])
+            i += 1
+    return "".join(result)
+
+
 def _match_lines(regex: re.Pattern[str], lines: list[str], invert: bool) -> set[int]:
     return {i for i, line in enumerate(lines) if bool(regex.search(line)) != invert}
 
@@ -191,6 +225,8 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
 
     if opts.fixed_strings:
         raw_patterns = [re.escape(p) for p in raw_patterns]
+    else:
+        raw_patterns = [_normalize_bre_escapes(p) for p in raw_patterns]
 
     if opts.word_regexp:
         raw_patterns = [r"\b(?:" + p + r")\b" for p in raw_patterns]
