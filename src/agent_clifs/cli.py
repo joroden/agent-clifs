@@ -69,6 +69,7 @@ class AgentCLI:
         readonly: bool = False,
         allowed_commands: set[str] | None = None,
         disabled_commands: set[str] | None = None,
+        bm25_top_files: int | None = None,
     ) -> None:
         """Initialize with an optional existing VFS.
 
@@ -87,6 +88,13 @@ class AgentCLI:
         *allowed_commands* is a whitelist — only these commands can be
         executed.  *disabled_commands* is a blacklist — these commands
         cannot be executed.  The two options are mutually exclusive.
+
+        When *bm25_top_files* is set to a positive integer, ``grep``
+        will automatically pre-filter candidate files using an in-memory
+        BM25 ranking index and search only the top *N* most relevant
+        files.  The index is built immediately from the current VFS
+        contents; call :meth:`reindex` to rebuild it after loading
+        additional files.
         """
         if allowed_commands is not None and disabled_commands is not None:
             raise ValueError(
@@ -128,12 +136,36 @@ class AgentCLI:
         self.vfs = vfs or VirtualFileSystem()
         self.structured = structured
         self.readonly = readonly
+        self._bm25_top_files = bm25_top_files
         if structured is True:
             self._formatter: LLMFormatter | None = LLMFormatter()
         elif structured:  # non-empty set/frozenset
             self._formatter = LLMFormatter(commands=frozenset(structured))
         else:
             self._formatter = None
+
+        if bm25_top_files is not None:
+            self._build_bm25_index()
+
+    # -- BM25 helpers --------------------------------------------------
+
+    def _build_bm25_index(self) -> None:
+        from agent_clifs.bm25 import BM25Index
+
+        index = BM25Index()
+        index.build(self.vfs._files)
+        self.vfs._bm25_index = index
+        self.vfs._bm25_top_n = self._bm25_top_files  # type: ignore[assignment]
+
+    def reindex(self) -> None:
+        """Rebuild the BM25 index from the current VFS contents.
+
+        Call this after loading files into the VFS when *bm25_top_files*
+        was set on initialisation.  Has no effect if BM25 ranking was not
+        enabled.
+        """
+        if self._bm25_top_files is not None:
+            self._build_bm25_index()
 
     # -- pipe helpers --------------------------------------------------
 
