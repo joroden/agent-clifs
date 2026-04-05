@@ -213,3 +213,37 @@ class TestGrep:
         result = cmd_grep(populated_vfs, ["-r", "--include-dir=tests", "def", "/src"])
         assert "test_main.py" in result  # /src/tests/ is whitelisted — included
         assert "vendor" not in result  # /src/vendor/ is not whitelisted — pruned
+
+    def test_bre_alternation(self, populated_vfs):
+        # \| is BRE alternation; Python re uses bare |
+        result = cmd_grep(populated_vfs, [r"def\|return", "/src/utils.py"])
+        assert "def helper():" in result
+        assert "return 42" in result
+
+    def test_bre_one_or_more(self, populated_vfs):
+        populated_vfs.write_file("/rep.txt", "aab\nab\nb\n")
+        result = cmd_grep(populated_vfs, [r"a\+b", "/rep.txt"])
+        lines = result.strip().splitlines()
+        assert "aab" in lines
+        assert "ab" in lines
+        assert "b" not in lines
+
+    def test_bre_zero_or_one(self, populated_vfs):
+        populated_vfs.write_file("/rep.txt", "colour\ncolor\ncolouur\n")
+        result = cmd_grep(populated_vfs, [r"colou\?r", "/rep.txt"])
+        assert "colour" in result
+        assert "color" in result
+        assert "colouur" not in result
+
+    def test_bre_grouping_with_alternation(self, populated_vfs):
+        # \(...\) is BRE grouping; paired with \| alternation
+        result = cmd_grep(populated_vfs, [r"\(def\|return\)", "/src/utils.py"])
+        assert "def helper():" in result
+        assert "return 42" in result
+
+    def test_bre_literal_backslash_preserved(self, populated_vfs):
+        # \\\\ in BRE should match a literal backslash
+        populated_vfs.write_file("/back.txt", "a\\b\nab\n")
+        result = cmd_grep(populated_vfs, [r"a\\b", "/back.txt"])
+        lines = result.strip().splitlines()
+        assert lines == ["a\\b"]
