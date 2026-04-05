@@ -223,6 +223,9 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
     if not raw_patterns:
         raise CommandError("grep: no pattern specified")
 
+    # Save originals before transformation for BM25 token extraction.
+    original_patterns = list(raw_patterns)
+
     if opts.fixed_strings:
         raw_patterns = [re.escape(p) for p in raw_patterns]
     else:
@@ -271,6 +274,18 @@ def cmd_grep(vfs: VirtualFileSystem, args: list[str]) -> str:
         files = [
             f for f in files if not fnmatch.fnmatch(f.rsplit("/", 1)[-1], opts.exclude)
         ]
+
+    # BM25 pre-filtering: when the VFS carries a ranking index, score all
+    # candidate files and keep only the top-N most relevant ones before
+    # running the actual regex search.
+    if vfs._bm25_index is not None and files:
+        from agent_clifs.bm25 import extract_query_tokens
+
+        query_tokens: list[str] = []
+        for p in original_patterns:
+            query_tokens.extend(extract_query_tokens(p, fixed_string=opts.fixed_strings))
+        if query_tokens:
+            files = vfs._bm25_index.top_files(query_tokens, files, vfs._bm25_top_n)
 
     if opts.no_filename:
         show_prefix = False

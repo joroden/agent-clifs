@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from posixpath import normpath
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agent_clifs.bm25 import BM25Index
 
 from agent_clifs.exceptions import (
     FileExistsVFSError,
@@ -25,6 +29,8 @@ class VirtualFileSystem:
         self._files: dict[str, str] = {}
         self._dirs: set[str] = {"/"}
         self._cwd: str = "/"
+        self._bm25_index: BM25Index | None = None
+        self._bm25_top_n: int = 10
 
     # ------------------------------------------------------------------
     # Path handling

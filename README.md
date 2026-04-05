@@ -71,6 +71,7 @@ AgentCLI(
     readonly=False,
     allowed_commands=None,
     disabled_commands=None,
+    bm25_top_files=None,
 )
 ```
 
@@ -81,6 +82,7 @@ AgentCLI(
 | `readonly` | `bool` | `False` | Disable all write commands (`write`, `append`, `rm`, `cp`, `mv`, `mkdir`, `touch`) |
 | `allowed_commands` | `set[str] \| None` | `None` | Whitelist of permitted commands; mutually exclusive with `disabled_commands` |
 | `disabled_commands` | `set[str] \| None` | `None` | Blacklist of forbidden commands; mutually exclusive with `allowed_commands` |
+| `bm25_top_files` | `int \| None` | `None` | Enable BM25 pre-filtering for `grep` (see below) |
 
 ### `structured` mode
 
@@ -101,6 +103,31 @@ cli = AgentCLI(structured=True)
                                      [/docs/api/users.md]
                                        L3: POST /api/users
 ```
+
+### BM25 pre-filtering
+
+When working with large codebases, `grep -r` can search hundreds of files and flood the LLM with results. Setting `bm25_top_files` builds an in-memory BM25 index over all loaded files and silently restricts each `grep` call to the top-N most relevant files — the LLM calls `grep` exactly as it normally would.
+
+```python
+vfs = VirtualFileSystem()
+vfs.load_from_dict(your_codebase)  # thousands of files
+
+cli = AgentCLI(vfs, bm25_top_files=10)
+
+# The LLM sees normal grep output, but only the 10 most
+# relevant files were searched — fewer tokens, less noise.
+cli.execute("grep -rn 'def authenticate' /")
+```
+
+The index is built once at initialisation. If you load more files afterwards, call `cli.reindex()` to rebuild it:
+
+```python
+cli = AgentCLI(bm25_top_files=10)
+cli.vfs.load_from_dict(more_files)
+cli.reindex()
+```
+
+**How it works:** query terms are extracted from the grep pattern (regex metacharacters are stripped so only literal words remain), files are scored with BM25, and only the top-N are passed to the regex engine. If no literal terms can be extracted from the pattern (e.g. `grep -r '.*' /`), BM25 filtering is skipped and all files are searched normally.
 
 ### Command access control
 
