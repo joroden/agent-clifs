@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.1 (2026-04-05)
+
+### Bug Fixes
+
+- Handle bre-style greps
+  ([`84fea2a`](https://github.com/joroden/agent-clifs/commit/84fea2a2ee1e965881b8d932160590f124d65da0))
+
+
 ## v1.2.0 (2026-04-04)
 
 ### Chores
